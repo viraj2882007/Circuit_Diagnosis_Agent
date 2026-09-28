@@ -1,0 +1,299 @@
+# MCU Family Configurations
+# Each family defines probe interface, flash algorithm, and test firmware build config
+
+families:
+  stm32:
+    name: "STM32"
+    description: "STMicroelectronics STM32 family (F0/F1/F3/F4/F7/G0/G4/H7/L0/L1/L4/L5/U5/WB/WL)"
+    probe_interfaces: ["swd", "jtag"]
+    default_probe: "stlink"
+    supported_probes: ["stlink", "jlink", "cmsis-dap", "blackmagic"]
+    flash_algorithms:
+      - family: "STM32F0"
+        algorithm: "stm32f0x"
+        page_size: 1024
+      - family: "STM32F1"
+        algorithm: "stm32f1x"
+        page_size: 1024
+      - family: "STM32F3"
+        algorithm: "stm32f3x"
+        page_size: 2048
+      - family: "STM32F4"
+        algorithm: "stm32f4x"
+        page_size: 16384
+      - family: "STM32F7"
+        algorithm: "stm32f7x"
+        page_size: 32768
+      - family: "STM32G0"
+        algorithm: "stm32g0x"
+        page_size: 2048
+      - family: "STM32G4"
+        algorithm: "stm32g4x"
+        page_size: 2048
+      - family: "STM32H7"
+        algorithm: "stm32h7x"
+        page_size: 131072
+      - family: "STM32L0"
+        algorithm: "stm32l0x"
+        page_size: 128
+      - family: "STM32L1"
+        algorithm: "stm32l1x"
+        page_size: 128
+      - family: "STM32L4"
+        algorithm: "stm32l4x"
+        page_size: 2048
+      - family: "STM32L5"
+        algorithm: "stm32l5x"
+        page_size: 2048
+      - family: "STM32U5"
+        algorithm: "stm32u5x"
+        page_size: 8192
+      - family: "STM32WB"
+        algorithm: "stm32wbx"
+        page_size: 2048
+      - family: "STM32WL"
+        algorithm: "stm32wlx"
+        page_size: 2048
+    zephyr_board_mapping:
+      "STM32F030R8": "nucleo_f030r8"
+      "STM32F072RB": "nucleo_f072rb"
+      "STM32F103C8": "nucleo_f103rb"
+      "STM32F103RB": "nucleo_f103rb"
+      "STM32F303RE": "nucleo_f303re"
+      "STM32F401RE": "nucleo_f401re"
+      "STM32F407VG": "nucleo_f407zg"
+      "STM32F411CE": "nucleo_f411re"
+      "STM32F429ZI": "nucleo_f429zi"
+      "STM32F746ZG": "nucleo_f746zg"
+      "STM32G031K8": "nucleo_g031k8"
+      "STM32G071RB": "nucleo_g071rb"
+      "STM32G431KB": "nucleo_g431rb"
+      "STM32G474RE": "nucleo_g474re"
+      "STM32H743ZI": "nucleo_h743zi"
+      "STM32L053R8": "nucleo_l053r8"
+      "STM32L152RE": "nucleo_l152re"
+      "STM32L432KC": "nucleo_l432kc"
+      "STM32L476RG": "nucleo_l476rg"
+      "STM32L552ZE": "nucleo_l552ze"
+      "STM32U575ZI": "nucleo_u575zi"
+      "STM32WB55RG": "nucleo_wb55rg"
+    test_firmware:
+      base_config: "stm32_common.conf"
+      ram_start: 0x20000000
+      ram_size_kb: 96
+      flash_start: 0x08000000
+    peripheral_map:
+      gpio_ports: ["A", "B", "C", "D", "E", "F", "G", "H"]
+      adc_channels: 18
+      dac_channels: 2
+      uart_count: 6
+      spi_count: 6
+      i2c_count: 4
+      timer_count: 14
+      usb: true
+      can: true
+      ethernet: false
+
+  esp32:
+    name: "ESP32"
+    description: "Espressif ESP32 series (ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-H2)"
+    probe_interfaces: ["jtag", "uart"]
+    default_probe: "esp-prog"
+    supported_probes: ["esp-prog", "jlink", "cmsis-dap", "ftdi"]
+    flash_algorithms:
+      - family: "ESP32"
+        algorithm: "esp32"
+        page_size: 4096
+      - family: "ESP32S2"
+        algorithm: "esp32s2"
+        page_size: 4096
+      - family: "ESP32S3"
+        algorithm: "esp32s3"
+        page_size: 4096
+      - family: "ESP32C3"
+        algorithm: "esp32c3"
+        page_size: 4096
+      - family: "ESP32H2"
+        algorithm: "esp32h2"
+        page_size: 4096
+    zephyr_board_mapping:
+      "ESP32": "esp32_devkitc"
+      "ESP32S2": "esp32s2_devkitc"
+      "ESP32S3": "esp32s3_devkitc"
+      "ESP32C3": "esp32c3_devkitc"
+      "ESP32H2": "esp32h2_devkitc"
+    test_firmware:
+      base_config: "esp32_common.conf"
+      ram_start: 0x3FC88000
+      ram_size_kb: 520
+      flash_start: 0x40000000
+    peripheral_map:
+      gpio_count: 34
+      adc_channels: 18
+      dac_channels: 2
+      uart_count: 3
+      spi_count: 4
+      i2c_count: 2
+      timer_count: 4
+      usb: true
+      can: true
+      wifi: true
+      bluetooth: true
+
+  rp2040:
+    name: "Raspberry Pi RP2040"
+    description: "Raspberry Pi RP2040 dual-core Cortex-M0+"
+    probe_interfaces: ["swd"]
+    default_probe: "cmsis-dap"
+    supported_probes: ["cmsis-dap", "jlink", "stlink", "blackmagic", "picoprobe"]
+    flash_algorithms:
+      - family: "RP2040"
+        algorithm: "rp2040"
+        page_size: 256
+    zephyr_board_mapping:
+      "RP2040": "rpi_pico"
+      "RP2040": "rp2040_pico"
+    test_firmware:
+      base_config: "rp2040_common.conf"
+      ram_start: 0x20000000
+      ram_size_kb: 264
+      flash_start: 0x10000000
+    peripheral_map:
+      gpio_count: 30
+      adc_channels: 4
+      dac_channels: 0
+      uart_count: 2
+      spi_count: 2
+      i2c_count: 2
+      timer_count: 4
+      usb: true
+      pio: true
+
+  arduino:
+    name: "Arduino AVR/SAMD"
+    description: "Arduino boards (AVR: Uno, Mega, Nano; SAMD: Zero, MKR, Nano 33 IoT)"
+    probe_interfaces: ["uart", "swd", "jtag"]
+    default_probe: "uart"
+    supported_probes: ["uart", "cmsis-dap", "jlink", "stlink"]
+    flash_algorithms:
+      - family: "AVR"
+        algorithm: "avr109"
+        page_size: 128
+      - family: "SAMD21"
+        algorithm: "samd21"
+        page_size: 256
+      - family: "SAMD51"
+        algorithm: "samd51"
+        page_size: 512
+    zephyr_board_mapping:
+      "ATMEGA328P": "arduino_uno"
+      "ATMEGA2560": "arduino_mega"
+      "ATSAMD21G18": "arduino_zero"
+      "ATSAMD51J19": "arduino_nano_33_iot"
+      "ATSAMD21E18": "arduino_mkr_zero"
+    test_firmware:
+      base_config: "arduino_common.conf"
+      ram_start: 0x20000000
+      ram_size_kb: 32
+      flash_start: 0x00000000
+    peripheral_map:
+      gpio_count: 20
+      adc_channels: 6
+      dac_channels: 1
+      uart_count: 1
+      spi_count: 1
+      i2c_count: 1
+      timer_count: 3
+
+# Probe configurations
+probes:
+  stlink:
+    name: "ST-Link/V2/V3"
+    interfaces: ["swd", "jtag"]
+    openocd_interface: "stlink"
+    pyocd_target: "stm32"
+    vid_pid: ["0483:3748", "0483:374b"]
+    transport: "usb"
+
+  jlink:
+    name: "SEGGER J-Link"
+    interfaces: ["swd", "jtag"]
+    openocd_interface: "jlink"
+    pyocd_target: "cortex_m"
+    vid_pid: ["1366:0101", "1366:0105"]
+    transport: "usb"
+
+  cmsis-dap:
+    name: "CMSIS-DAP"
+    interfaces: ["swd", "jtag"]
+    openocd_interface: "cmsis-dap"
+    pyocd_target: "auto"
+    vid_pid: []
+    transport: "usb"
+
+  esp-prog:
+    name: "ESP-Prog"
+    interfaces: ["jtag", "uart"]
+    openocd_interface: "ftdi"
+    pyocd_target: "esp32"
+    vid_pid: ["0403:6010"]
+    transport: "usb"
+    ftdi_config: "esp32_devkitj_v1.cfg"
+
+  blackmagic:
+    name: "Black Magic Probe"
+    interfaces: ["swd", "jtag"]
+    openocd_interface: "blackmagic"
+    pyocd_target: "auto"
+    vid_pid: ["1d50:6018"]
+    transport: "usb"
+
+  picoprobe:
+    name: "PicoProbe (RP2040 as probe)"
+    interfaces: ["swd"]
+    openocd_interface: "picoprobe"
+    pyocd_target: "rp2040"
+    vid_pid: ["2e8a:000c"]
+    transport: "usb"
+
+# Test suite definitions
+test_suites:
+  basic:
+    name: "Basic Functionality"
+    tests: ["cpu_id", "ram_march_quick", "flash_id", "clock_check", "gpio_toggle", "entropy"]
+    required: true
+
+  gpio:
+    name: "GPIO Comprehensive"
+    tests: ["gpio_output", "gpio_input_pullup", "gpio_input_pulldown", "gpio_interrupt", "gpio_short_detect"]
+    depends_on: ["basic"]
+
+  analog:
+    name: "Analog Peripherals"
+    tests: ["adc_internal_temp", "adc_vref", "adc_external", "dac_output", "dac_adc_loopback"]
+    depends_on: ["basic"]
+
+  communication:
+    name: "Communication Interfaces"
+    tests: ["uart_loopback", "uart_baud_rates", "spi_loopback", "spi_frequency", "i2c_scan", "i2c_eeprom", "i2c_speed"]
+    depends_on: ["basic", "gpio"]
+
+  timing:
+    name: "Timers and PWM"
+    tests: ["pwm_output", "timer_count", "input_capture", "rtc_test"]
+    depends_on: ["basic"]
+
+  memory:
+    name: "Memory Integrity"
+    tests: ["flash_write_read", "flash_erase", "ram_march", "ram_extended_march"]
+    depends_on: ["basic"]
+
+  clock:
+    name: "Clock Subsystem"
+    tests: ["sys_clock", "clock_control", "external_crystal", "pll_config"]
+    depends_on: ["basic"]
+
+  advanced:
+    name: "Advanced Features"
+    tests: ["usb_enumerate", "wifi_scan", "bluetooth_adv", "ethernet_link", "crypto_accel"]
+    depends_on: ["basic", "communication"]

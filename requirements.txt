@@ -1,0 +1,36 @@
+# MCU Diagnostic Agent - Python Dependencies
+
+# Core dependencies
+pyyaml>=6.0
+pyserial>=3.5
+
+# Debug probe backends
+pyocd>=0.32.0
+# openocd - system package, not pip
+
+# Zephyr build (requires west)
+# west - installed via pip or system package
+
+# Testing
+pytest>=7.0
+pytest-asyncio>=0.21
+pytest-cov>=4.0
+
+# Development
+black>=23.0
+ruff>=0.1.0
+mypy>=1.0
+pre-commit>=3.0
+
+# Type hints
+typing-extensions>=4.5
+
+# Optional: Rich CLI output
+rich>=13.0
+
+# Optional: Progress bars
+tqdm>=4.65
+
+# Optional: Data visualization
+matplotlib>=3.7
+plotly>=5.15

@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcu-diagnostic-agent"
+version = "1.0.0"
+description = "Automated MCU peripheral diagnostic tool"
+readme = "README.md"
+authors = [{name = "MCU Diagnostic Agent Team"}]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Embedded Systems",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "pyyaml>=6.0",
+    "pyserial>=3.5",
+    "pyocd>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+    "pre-commit>=3.0",
+    "rich>=13.0",
+    "tqdm>=4.65",
+]
+viz = [
+    "matplotlib>=3.7",
+    "plotly>=5.15",
+]
+
+[project.scripts]
+mcu-diag = "mcu_diagnostic_agent.orchestrator.agent:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["../config/*.yaml", "../zephyr_app/**/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+select = ["E", "F", "I", "UP", "W", "C4", "C9", "B", "SIM", "TID", "ARG", "PTH", "ERA", "PL", "TRY", "NPY", "RSE", "RET", "ASYNC"]
+ignore = ["S101", "TRY003", "ARG001", "ARG002"]
+per-file-ignores = {
+    "tests/*": ["S101", "ERA001"],
+}
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+  | __pycache__
+)/
+'''
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
