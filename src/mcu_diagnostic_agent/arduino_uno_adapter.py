@@ -416,11 +416,6 @@ def run_diagnostic(
             signature_details,
             signature_elapsed,
         ))
-        if signature_status == "fail":
-            raise RuntimeError(
-                "MCU signature verification did not pass. No Uno sketch commands were sent. "
-                + signature_details
-            )
     else:
         chip_tests.append(_test_result(
             "ATmega328P device signature",
@@ -429,133 +424,152 @@ def run_diagnostic(
             "Skipped by the user; MCU silicon signature was not independently verified.",
         ))
 
-    try:
-        with serial.Serial(detection.port, baudrate=115200, timeout=0.2, write_timeout=2.0) as ser:
-            startup_lines = _read_startup(ser)
-            if _READY_MARKER not in "\n".join(startup_lines):
-                raise RuntimeError(
-                    "Expected the project diagnostic firmware banner was not received. "
-                    "No diagnostic command was sent. Upload firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino "
-                    "manually, close Serial Monitor, and retry."
-                )
-
-            lines, elapsed, completed = _send_command(
-                ser, "INFO", (_INFO_MARKER,), timeout_seconds
-            )
-            info = "\n".join(lines)
-            if not completed or "BOARD:ARDUINO_UNO_R3" not in info or "FIRMWARE_VERSION:2" not in info:
-                raise RuntimeError(
-                    "The port is an Uno R3, but it did not confirm diagnostic firmware version 2. "
-                    "No other tests were run."
-                )
-            firmware_tests.append(_test_result(
-                "Diagnostic firmware identity",
-                "Firmware handshake",
-                "pass",
-                info,
-                elapsed,
-            ))
-
-            if scan_i2c:
-                i2c_confirm = input(
-                    "I2C scan sends address probes on A4/A5. Confirm any attached modules use "
-                    "compatible voltage levels/pull-ups. Type SCAN to continue: "
-                )
-                if i2c_confirm.strip().upper() == "SCAN":
-                    lines, elapsed, completed = _send_command(
-                        ser, "I2C_SCAN", ("I2C_SCAN RESULT:",), timeout_seconds * 3
+    if signature_status != "fail":
+        try:
+            with serial.Serial(detection.port, baudrate=115200, timeout=0.2, write_timeout=2.0) as ser:
+                startup_lines = _read_startup(ser)
+                if _READY_MARKER not in "\n".join(startup_lines):
+                    raise RuntimeError(
+                        "Expected the project diagnostic firmware banner was not received. "
+                        "No diagnostic command was sent. Upload firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino "
+                        "manually, close Serial Monitor, and retry."
                     )
-                    scan_line = next((line for line in lines if "I2C_SCAN RESULT:" in line), "")
-                    addresses = parse_i2c_addresses(lines)
-                    status = "pass" if completed and scan_line else "fail"
-                    details = scan_line or "I2C scan timed out. Output: {}".format(" | ".join(lines))
-                    i2c_tests.append(_test_result("I2C address scan", "I2C", status, details, elapsed))
-                    for address in addresses:
-                        matched_profile = None
-                        matched_value = None
-                        identity_evidence = []
-                        candidate_profiles = profiles_for_i2c_address(address) if identify_i2c else []
-                        registers = sorted({profile.identity_register for profile in candidate_profiles})
-                        for register in registers:
-                            read_lines, read_elapsed, read_completed = _send_command(
-                                ser,
-                                "I2C_READ 0x{:02X} 0x{:02X}".format(address, register),
-                                ("I2C_READ RESULT:", "ERROR:"),
-                                timeout_seconds,
-                            )
-                            read_line = next(
-                                (line for line in read_lines if "I2C_READ RESULT:" in line), ""
-                            )
-                            value_match = re.search(r"VALUE=0x([0-9A-F]{1,2})$", read_line, re.IGNORECASE)
-                            value = int(value_match.group(1), 16) if value_match else None
-                            if read_line:
-                                identity_evidence.append(read_line)
-                            if read_completed and value is not None:
-                                candidate = match_i2c_identity(address, register, value)
-                                if candidate is not None:
-                                    matched_profile = candidate
-                                    matched_value = value
-                                    i2c_tests.append(_test_result(
-                                        "{} chip identity at 0x{:02X}".format(candidate.display_name, address),
-                                        "I2C",
-                                        "pass",
-                                        read_line + " matched " + candidate.profile_id,
-                                        read_elapsed,
-                                        [float(value)],
-                                    ))
-                                    break
 
-                        if matched_profile is not None:
-                            external.append({
-                                "name": matched_profile.display_name,
-                                "interface": "I2C",
-                                "profile": matched_profile.profile_id,
-                                "status": "not_tested",
-                                "expected": "Device-specific functional checks beyond chip ID",
-                                "observed": (
-                                    "ACK at 0x{:02X}; identity register 0x{:02X} returned 0x{:02X}."
-                                    .format(address, matched_profile.identity_register, matched_value)
-                                ),
-                                "measurements": {},
-                                "evidence": [
-                                    "Arduino Uno R3 I2C scanner reported ACK at this address."
-                                ] + identity_evidence,
-                                "notes": (
-                                    "Device model was identified by its documented ID register. "
-                                    "Its sensor/display/actuator functions were not yet tested."
-                                ),
-                            })
-                        else:
-                            external.append({
-                                "name": "Unidentified I2C peripheral at 0x{:02X}".format(address),
-                                "interface": "I2C",
-                                "profile": "",
-                                "status": "unknown",
-                                "expected": "Device-specific identity/health test",
-                                "observed": "Address 0x{:02X} acknowledged an I2C address probe.".format(address),
-                                "measurements": {},
-                                "evidence": [
-                                    "Arduino Uno R3 I2C scanner reported ACK at this address."
-                                ] + identity_evidence,
-                                "notes": (
-                                    "No known ID-register profile matched. Address ACK does not "
-                                    "identify the device or prove it is healthy."
-                                ),
-                            })
-                    if not addresses and status == "pass":
-                        i2c_tests[-1].details += " No peripherals ACKed; this is not by itself an MCU failure."
-                else:
-                    _add_skipped(i2c_tests, "I2C address scan", "I2C", "User did not approve I2C bus scan.")
-            if interactive:
-                _run_manual_tests(
-                    ser, gpio_tests, pwm_tests, adc_tests, spi_tests, led_tests, timeout_seconds
+                lines, elapsed, completed = _send_command(
+                    ser, "INFO", (_INFO_MARKER,), timeout_seconds
                 )
-    except serial.SerialException as exc:
-        raise RuntimeError(
-            "Could not open/use {}. Close Arduino Serial Monitor and other serial applications. ({})".format(
-                detection.port, exc
-            )
-        ) from None
+                info = "\n".join(lines)
+                if not completed or "BOARD:ARDUINO_UNO_R3" not in info or "FIRMWARE_VERSION:2" not in info:
+                    raise RuntimeError(
+                        "The port is an Uno R3, but it did not confirm diagnostic firmware version 2. "
+                        "No other tests were run."
+                    )
+                firmware_tests.append(_test_result(
+                    "Diagnostic firmware identity",
+                    "Firmware handshake",
+                    "pass",
+                    info,
+                    elapsed,
+                ))
+
+                if scan_i2c:
+                    i2c_confirm = input(
+                        "I2C scan sends address probes on A4/A5. Confirm any attached modules use "
+                        "compatible voltage levels/pull-ups. Type SCAN to continue: "
+                    )
+                    if i2c_confirm.strip().upper() == "SCAN":
+                        lines, elapsed, completed = _send_command(
+                            ser, "I2C_SCAN", ("I2C_SCAN RESULT:",), timeout_seconds * 3
+                        )
+                        scan_line = next((line for line in lines if "I2C_SCAN RESULT:" in line), "")
+                        addresses = parse_i2c_addresses(lines)
+                        status = "pass" if completed and scan_line else "fail"
+                        details = scan_line or "I2C scan timed out. Output: {}".format(" | ".join(lines))
+                        i2c_tests.append(_test_result("I2C address scan", "I2C", status, details, elapsed))
+                        for address in addresses:
+                            matched_profile = None
+                            matched_value = None
+                            identity_evidence = []
+                            candidate_profiles = profiles_for_i2c_address(address) if identify_i2c else []
+                            registers = sorted({profile.identity_register for profile in candidate_profiles})
+                            for register in registers:
+                                read_lines, read_elapsed, read_completed = _send_command(
+                                    ser,
+                                    "I2C_READ 0x{:02X} 0x{:02X}".format(address, register),
+                                    ("I2C_READ RESULT:", "ERROR:"),
+                                    timeout_seconds,
+                                )
+                                read_line = next(
+                                    (line for line in read_lines if "I2C_READ RESULT:" in line), ""
+                                )
+                                value_match = re.search(r"VALUE=0x([0-9A-F]{1,2})$", read_line, re.IGNORECASE)
+                                value = int(value_match.group(1), 16) if value_match else None
+                                if read_line:
+                                    identity_evidence.append(read_line)
+                                if read_completed and value is not None:
+                                    candidate = match_i2c_identity(address, register, value)
+                                    if candidate is not None:
+                                        matched_profile = candidate
+                                        matched_value = value
+                                        i2c_tests.append(_test_result(
+                                            "{} chip identity at 0x{:02X}".format(candidate.display_name, address),
+                                            "I2C",
+                                            "pass",
+                                            read_line + " matched " + candidate.profile_id,
+                                            read_elapsed,
+                                            [float(value)],
+                                        ))
+                                        break
+
+                            if matched_profile is not None:
+                                external.append({
+                                    "name": matched_profile.display_name,
+                                    "interface": "I2C",
+                                    "profile": matched_profile.profile_id,
+                                    "status": "not_tested",
+                                    "expected": "Device-specific functional checks beyond chip ID",
+                                    "observed": (
+                                        "ACK at 0x{:02X}; identity register 0x{:02X} returned 0x{:02X}."
+                                        .format(address, matched_profile.identity_register, matched_value)
+                                    ),
+                                    "measurements": {},
+                                    "evidence": [
+                                        "Arduino Uno R3 I2C scanner reported ACK at this address."
+                                    ] + identity_evidence,
+                                    "notes": (
+                                        "Device model was identified by its documented ID register. "
+                                        "Its sensor/display/actuator functions were not yet tested."
+                                    ),
+                                })
+                            else:
+                                external.append({
+                                    "name": "Unidentified I2C peripheral at 0x{:02X}".format(address),
+                                    "interface": "I2C",
+                                    "profile": "",
+                                    "status": "unknown",
+                                    "expected": "Device-specific identity/health test",
+                                    "observed": "Address 0x{:02X} acknowledged an I2C address probe.".format(address),
+                                    "measurements": {},
+                                    "evidence": [
+                                        "Arduino Uno R3 I2C scanner reported ACK at this address."
+                                    ] + identity_evidence,
+                                    "notes": (
+                                        "No known ID-register profile matched. Address ACK does not "
+                                        "identify the device or prove it is healthy."
+                                    ),
+                                })
+                        if not addresses and status == "pass":
+                            i2c_tests[-1].details += " No peripherals ACKed; this is not by itself an MCU failure."
+                    else:
+                        _add_skipped(i2c_tests, "I2C address scan", "I2C", "User did not approve I2C bus scan.")
+                if interactive:
+                    _run_manual_tests(
+                        ser, gpio_tests, pwm_tests, adc_tests, spi_tests, led_tests, timeout_seconds
+                    )
+        except serial.SerialException as exc:
+            raise RuntimeError(
+                "Could not open/use {}. Close Arduino Serial Monitor and other serial applications. ({})".format(
+                    detection.port, exc
+                )
+            ) from None
+    else:
+        reason = (
+            "Skipped because the AVRDUDE MCU signature check did not match the expected "
+            "ATmega328P signature. No serial sketch commands were sent."
+        )
+        _add_skipped(firmware_tests, "Diagnostic firmware identity", "Firmware handshake", reason)
+        if scan_i2c:
+            _add_skipped(i2c_tests, "I2C address scan", "I2C", reason)
+        if interactive:
+            _add_skipped(led_tests, "Onboard LED blink", "Onboard", reason)
+            for source, sink in ([(2, pin) for pin in range(3, 14)] + [(3, 4)]):
+                _add_skipped(gpio_tests, "GPIO jumper pair D{}-D{}".format(source, sink), "GPIO", reason)
+            for pin in (3, 5, 6, 9, 10, 11):
+                _add_skipped(pwm_tests, "PWM output D{}".format(pin), "PWM", reason)
+            for pin in range(6):
+                for level in ("LOW", "HIGH"):
+                    _add_skipped(adc_tests, "ADC A{} {}".format(pin, level), "ADC", reason)
+            _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", reason)
 
     suites: List[SuiteResultData] = []
     for name, tests in (
