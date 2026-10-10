@@ -27,6 +27,7 @@ from .reporting.generator import (
 )
 
 _READY_MARKER = "UNO R3 DIAGNOSTIC SKETCH READY"
+_STARTUP_COMPLETE_MARKER = "LED test sequence complete."
 _INFO_MARKER = "INFO RESULT: PASS"
 
 
@@ -202,9 +203,10 @@ def _choose_port(
 
 
 def _read_startup(ser: serial.Serial, timeout_seconds: float = 8.0) -> List[str]:
-    """Wait for the expected firmware banner after opening the serial port resets the Uno."""
+    """Drain the full startup sequence so its INFO output cannot be mistaken for a command reply."""
     deadline = time.monotonic() + timeout_seconds
     lines: List[str] = []
+    saw_ready = False
     while time.monotonic() < deadline:
         raw = ser.readline()
         if not raw:
@@ -213,6 +215,8 @@ def _read_startup(ser: serial.Serial, timeout_seconds: float = 8.0) -> List[str]
         if line:
             lines.append(line)
         if _READY_MARKER in line:
+            saw_ready = True
+        if saw_ready and _STARTUP_COMPLETE_MARKER in line:
             return lines
     return lines
 
@@ -516,11 +520,15 @@ def run_diagnostic(
         try:
             with serial.Serial(detection.port, baudrate=115200, timeout=0.2, write_timeout=2.0) as ser:
                 startup_lines = _read_startup(ser)
-                if _READY_MARKER not in "\n".join(startup_lines):
+                startup_text = "\n".join(startup_lines)
+                if (
+                    _READY_MARKER not in startup_text
+                    or _STARTUP_COMPLETE_MARKER not in startup_text
+                ):
                     raise RuntimeError(
-                        "Expected the project diagnostic firmware banner was not received. "
-                        "No diagnostic command was sent. Upload firmware/arduino_uno_r3/arduino_uno_r3.ino "
-                        "manually, close Serial Monitor, and retry."
+                        "The complete project diagnostic firmware startup sequence was not received. "
+                        "No diagnostic command was sent. Confirm the version 3 sketch is uploaded, "
+                        "close Serial Monitor, and retry."
                     )
 
                 lines, elapsed, completed = _send_command(
