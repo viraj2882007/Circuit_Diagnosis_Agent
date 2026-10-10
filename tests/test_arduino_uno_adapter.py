@@ -17,13 +17,13 @@ def test_startup_reader_drains_startup_before_handshake():
     class FakeSerial:
         def __init__(self):
             self.lines = [
-                b"UNO R3 DIAGNOSTIC SKETCH READY\\r\\n",
-                b"BOARD:ARDUINO_UNO_R3\\r\\n",
-                b"FIRMWARE_VERSION:3\\r\\n",
-                b"INFO RESULT: PASS\\r\\n",
-                b"No external wires should be connected until a test asks for one.\\r\\n",
-                b"LED test sequence complete. Did the onboard L LED blink 3 times?\\r\\n",
-                b"NEXT COMMAND RESPONSE\\r\\n",
+                b"UNO R3 DIAGNOSTIC SKETCH READY\r\n",
+                b"BOARD:ARDUINO_UNO_R3\r\n",
+                b"FIRMWARE_VERSION:3\r\n",
+                b"INFO RESULT: PASS\r\n",
+                b"No external wires should be connected until a test asks for one.\r\n",
+                b"LED test sequence complete. Did the onboard L LED blink 3 times?\r\n",
+                b"NEXT COMMAND RESPONSE\r\n",
             ]
 
         def readline(self):
@@ -34,7 +34,7 @@ def test_startup_reader_drains_startup_before_handshake():
 
     assert any("UNO R3 DIAGNOSTIC SKETCH READY" in line for line in lines)
     assert any("LED test sequence complete." in line for line in lines)
-    assert serial_port.lines == [b"NEXT COMMAND RESPONSE\\r\\n"]
+    assert serial_port.lines == [b"NEXT COMMAND RESPONSE\r\n"]
 
 
 def test_parse_pair_results_extracts_both_directions():
