@@ -34,7 +34,7 @@ class SuiteResultData:
     passed: int
     failed: int
     skipped: int
-    duration_ms: float
+    duration_ms: Optional[float]
 
 
 @dataclass
