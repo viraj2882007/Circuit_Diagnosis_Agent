@@ -105,11 +105,11 @@ mcu-uno-test --port COM9
 # This mode prompts for each jumper/wiring change and records skipped checks as skipped.
 mcu-uno-test --port COM9 --interactive
 
-# Optional I2C address scan and AI analysis; verify 5V/3.3V compatibility and pull-ups first.
-mcu-uno-test --port COM9 --scan-i2c --ai-analysis
+# Optional I2C scan + known chip-ID checks + AI analysis; check voltage/pull-ups first.
+mcu-uno-test --port COM9 --identify-i2c --ai-analysis
 ```
 
-The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK but does not infer device identity or health; address responses are stored as unknown observations until a device-specific profile check is performed. For safety, the scanner asks for confirmation before probing the bus.
+The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
 
 ### Test Suites
 
