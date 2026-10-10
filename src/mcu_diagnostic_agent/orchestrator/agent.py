@@ -20,7 +20,7 @@ import yaml
 from ..probe import get_probe, ProbeFactory, ProbeInterfaceType
 from ..config import load_mcu_config, get_family_config
 from ..firmware import FirmwareBuilder, FirmwareConfig
-from .test_runner import TestRunner, TestSession
+from .test_runner import TestRunner
 from ..reporting import ReportGenerator, DiagnosticReport
 from ..reporting.generator import SuiteResultData, TestResultData
 from ..ai_diagnosis import generate_ai_analysis
@@ -82,6 +82,11 @@ class DiagnosticAgent:
         self.factory = ProbeFactory()
         self.firmware_builder = FirmwareBuilder()
         self.report_generator = ReportGenerator(config.output_dir)
+        # Validate any supplied external evidence before connecting or flashing hardware.
+        self.external_observations = load_external_observations(
+            config.external_observations_file
+        )
+        self.firmware_overwritten = False
 
     async def run(self) -> DiagnosticReport:
         """Run complete diagnostic session."""
@@ -104,7 +109,7 @@ class DiagnosticAgent:
             # Step 5: Generate report
             await self._generate_report()
 
-            # Step 6: Cleanup (restore original firmware)
+            # Step 6: Disconnect and leave target flash intact
             await self._cleanup()
 
             self.session.state = DiagnosticState.COMPLETE
@@ -172,6 +177,7 @@ class DiagnosticAgent:
             raise RuntimeError(f"Flash failed: {result.error}")
 
         logger.info(f"Flashed {result.bytes_written} bytes in {result.duration_ms:.1f}ms")
+        self.firmware_overwritten = True
 
         # Reset and let firmware run
         self.session.probe.reset(halt=False, run=True)
@@ -221,7 +227,7 @@ class DiagnosticAgent:
             )
             for suite in results
         ]
-        external = load_external_observations(self.config.external_observations_file)
+        external = self.external_observations
 
         # Create report object.
         self.session.report = DiagnosticReport(
@@ -264,15 +270,14 @@ class DiagnosticAgent:
         self.session.state = DiagnosticState.CLEANING_UP
 
         if self.session.probe and self.session.probe.connected:
-            if not self.config.keep_firmware:
+            if self.firmware_overwritten and not self.config.keep_firmware:
                 logger.warning(
-                    "Automatic erase/restore is disabled: no original-firmware backup/restore "
-                    "exists. The diagnostic firmware may remain on the MCU. Restore your "
-                    "application using your board vendor's recovery procedure."
+                    "Original firmware backup/restore is not implemented. Diagnostic firmware "
+                    "will remain on the target; restore your application using a known-good "
+                    "board recovery procedure."
                 )
-            else:
+            elif self.firmware_overwritten:
                 logger.info("Leaving diagnostic firmware on target as requested.")
-
             logger.info("Disconnecting...")
             self.session.probe.disconnect()
 
