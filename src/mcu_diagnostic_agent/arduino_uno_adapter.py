@@ -5,7 +5,7 @@ from firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino before running pin tests.
 """
 
 import argparse
-import asdict
+from dataclasses import asdict
 import re
 import sys
 import time
