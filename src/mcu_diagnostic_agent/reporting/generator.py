@@ -153,7 +153,7 @@ class ReportGenerator:
         html = f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>MCU Diagnostic Report - {report.mcu_family} {report.mcu_part}</title>
+    <title>MCU Diagnostic Report - {html_lib.escape(str(report.mcu_family))} {html_lib.escape(str(report.mcu_part))}</title>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; }}
         .header {{ border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }}
@@ -180,12 +180,12 @@ class ReportGenerator:
 <body>
     <div class="header">
         <h1>MCU Diagnostic Report</h1>
-        <p><strong>MCU:</strong> {report.mcu_family} {report.mcu_part}</p>
-        <p><strong>Date:</strong> {report.timestamp}</p>
+        <p><strong>MCU:</strong> {html_lib.escape(str(report.mcu_family))} {html_lib.escape(str(report.mcu_part))}</p>
+        <p><strong>Date:</strong> {html_lib.escape(str(report.timestamp))}</p>
         <p><strong>Duration:</strong> {report.duration:.1f}s</p>
         <p><strong>Firmware Version:</strong> {report.firmware_version}</p>
-        <p><strong>Device ID:</strong> {report.device_id}</p>
-        <p><strong>Test Suites:</strong> {', '.join(report.test_suites)}</p>
+        <p><strong>Device ID:</strong> {html_lib.escape(str(report.device_id))}</p>
+        <p><strong>Test Suites:</strong> {html_lib.escape(', '.join(report.test_suites))}</p>
     </div>
 
     <div class="summary">
@@ -211,7 +211,7 @@ class ReportGenerator:
         for suite in report.suites:
             html += f"""
     <div class="suite">
-        <h2>{suite.name} ({suite.passed} passed, {suite.failed} failed, {suite.skipped} skipped)</h2>
+        <h2>{html_lib.escape(str(suite.name))} ({suite.passed} passed, {suite.failed} failed, {suite.skipped} skipped)</h2>
 """
 
             for test in suite.tests:
@@ -221,11 +221,11 @@ class ReportGenerator:
                 html += f"""
         <div class="test">
             <div>
-                <div class="test-name">{test.name}</div>
-                <div class="test-details">{test.details}</div>
-                {f'<div class="measurements">Measurements: {meas_str}</div>' if meas_str else ''}
+                <div class="test-name">{html_lib.escape(str(test.name))}</div>
+                <div class="test-details">{html_lib.escape(str(test.details))}</div>
+                {f'<div class="measurements">Measurements: {html_lib.escape(meas_str)}</div>' if meas_str else ''}
             </div>
-            <div class="test-status" style="background: {color};">{test.status.upper()}</div>
+            <div class="test-status" style="background: {color};">{html_lib.escape(str(test.status).upper())}</div>
         </div>
 """
 
