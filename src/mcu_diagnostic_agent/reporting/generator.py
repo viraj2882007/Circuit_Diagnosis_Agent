@@ -111,20 +111,18 @@ class ReportGenerator:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = f"diag_{report.mcu_family}_{report.mcu_part}_{timestamp}"
 
-        # Generate JSON
+        # Set all output paths before serializing so the JSON report records its own paths.
         json_path = self.output_dir / f"{base_name}.json"
-        self._generate_json(report, json_path)
-        report.json_path = str(json_path)
-
-        # Generate HTML
         html_path = self.output_dir / f"{base_name}.html"
-        self._generate_html(report, html_path)
-        report.html_path = str(html_path)
-
-        # Generate summary text
         txt_path = self.output_dir / f"{base_name}.txt"
-        self._generate_text(report, txt_path)
+        report.json_path = str(json_path)
+        report.html_path = str(html_path)
         report.report_path = str(txt_path)
+
+        # Generate JSON, HTML, and text using UTF-8 for Windows and non-ASCII analysis output.
+        self._generate_json(report, json_path)
+        self._generate_html(report, html_path)
+        self._generate_text(report, txt_path)
 
         logger.info(f"Reports generated: {json_path}, {html_path}, {txt_path}")
         return txt_path
