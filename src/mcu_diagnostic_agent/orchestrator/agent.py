@@ -11,7 +11,7 @@ import argparse
 import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 import time
 import json
@@ -22,6 +22,9 @@ from ..config import load_mcu_config, get_family_config
 from ..firmware import FirmwareBuilder, FirmwareConfig
 from .test_runner import TestRunner, TestSession
 from ..reporting import ReportGenerator, DiagnosticReport
+from ..reporting.generator import SuiteResultData, TestResultData
+from ..ai_diagnosis import generate_ai_analysis
+from ..peripheral_observations import load_external_observations
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,10 @@ class DiagnosticConfig:
     keep_firmware: bool = False
     verbose: bool = False
     timeout: int = 300  # seconds
+    ai_analysis: bool = False
+    external_observations_file: Optional[Path] = None
+    nemotron_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    allow_firmware_overwrite: bool = False
 
 
 @dataclass
@@ -130,6 +137,13 @@ class DiagnosticAgent:
 
     async def _flash_firmware(self) -> None:
         """Build and flash diagnostic firmware."""
+        if not self.config.allow_firmware_overwrite:
+            raise RuntimeError(
+                "Safety stop: diagnostic firmware overwrites the target's existing program, "
+                "and automatic firmware backup/restore is not implemented. Re-run with "
+                "--allow-firmware-overwrite only if you have a recovery method and accept "
+                "that the diagnostic firmware will remain on the target."
+            )
         self.session.state = DiagnosticState.FLASHING
 
         if self.config.firmware_path:
@@ -184,38 +198,80 @@ class DiagnosticAgent:
         logger.info("Collecting results...")
         results = await self.session.test_runner.get_results()
 
-        # Create report object
+        # Map runner output to the serializable report dataclasses.
+        suite_data = [
+            SuiteResultData(
+                name=suite.name,
+                tests=[
+                    TestResultData(
+                        name=test.name,
+                        suite=test.suite,
+                        status=test.status.value,
+                        duration_ms=test.duration_ms,
+                        details=test.details,
+                        measurements=list(test.measurements),
+                        timestamp=test.timestamp,
+                    )
+                    for test in suite.tests
+                ],
+                passed=suite.passed,
+                failed=suite.failed,
+                skipped=suite.skipped,
+                duration_ms=suite.duration_ms,
+            )
+            for suite in results
+        ]
+        external = load_external_observations(self.config.external_observations_file)
+
+        # Create report object.
         self.session.report = DiagnosticReport(
             mcu_family=self.config.mcu_family,
-            mcu_part=self.config.mcu_part,
-            test_suites=self.config.test_suites,
-            results=results,
+            mcu_part=self.config.mcu_part or "unknown",
+            test_suites=list(self.config.test_suites),
+            suites=suite_data,
+            external_peripherals=external,
             duration=time.time() - self.session.start_time,
         )
 
         logger.info(f"Collected {sum(len(s.tests) for s in results)} test results")
 
     async def _generate_report(self) -> None:
-        """Generate diagnostic report."""
+        """Run optional evidence-based AI analysis and generate all reports."""
         self.session.state = DiagnosticState.GENERATING_REPORT
+        report = self.session.report
+
+        if self.config.ai_analysis:
+            logger.info("Running Nemotron evidence analysis...")
+            try:
+                report.ai_analysis = generate_ai_analysis(
+                    asdict(report),
+                    model=self.config.nemotron_model,
+                )
+            except Exception as exc:
+                # Preserve the measured diagnostic report even if the API is unavailable.
+                report.ai_analysis = (
+                    "AI analysis unavailable. No AI-generated cause or repair advice was "
+                    f"produced. Reason: {type(exc).__name__}: {exc}"
+                )
+                logger.warning("Nemotron analysis unavailable: %s", exc)
 
         logger.info("Generating report...")
-        report_path = self.report_generator.generate(self.session.report)
+        report_path = self.report_generator.generate(report)
         logger.info(f"Report saved to {report_path}")
 
     async def _cleanup(self) -> None:
-        """Cleanup: restore original firmware, disconnect."""
+        """Disconnect safely without erasing user flash."""
         self.session.state = DiagnosticState.CLEANING_UP
 
         if self.session.probe and self.session.probe.connected:
             if not self.config.keep_firmware:
-                logger.info("Restoring original firmware...")
-                # For now, just erase test firmware
-                # TODO: Implement firmware backup/restore
-                try:
-                    self.session.probe.erase_flash()
-                except Exception as e:
-                    logger.warning(f"Failed to erase test firmware: {e}")
+                logger.warning(
+                    "Automatic erase/restore is disabled: no original-firmware backup/restore "
+                    "exists. The diagnostic firmware may remain on the MCU. Restore your "
+                    "application using your board vendor's recovery procedure."
+                )
+            else:
+                logger.info("Leaving diagnostic firmware on target as requested.")
 
             logger.info("Disconnecting...")
             self.session.probe.disconnect()
@@ -235,6 +291,12 @@ async def main_async(args: argparse.Namespace) -> int:
         keep_firmware=args.keep_firmware,
         verbose=args.verbose,
         timeout=args.timeout,
+        ai_analysis=args.ai_analysis,
+        external_observations_file=(
+            Path(args.external_observations) if args.external_observations else None
+        ),
+        nemotron_model=args.nemotron_model,
+        allow_firmware_overwrite=args.allow_firmware_overwrite,
     )
 
     if config.verbose:
@@ -269,6 +331,25 @@ def main() -> int:
     parser.add_argument("--keep-firmware", action="store_true",
                         help="Leave test firmware on device after test")
     parser.add_argument("--timeout", type=int, default=300, help="Test timeout (seconds)")
+    parser.add_argument(
+        "--ai-analysis",
+        action="store_true",
+        help="Add NVIDIA Nemotron root-cause, prevention, and repairability analysis to reports",
+    )
+    parser.add_argument(
+        "--nemotron-model",
+        default="nvidia/nemotron-3-ultra-550b-a55b",
+        help="NVIDIA NIM model identifier (default: Nemotron 3 Ultra)",
+    )
+    parser.add_argument(
+        "--external-observations",
+        help="Path to JSON with observations/measurements from connected external peripherals",
+    )
+    parser.add_argument(
+        "--allow-firmware-overwrite",
+        action="store_true",
+        help="Explicitly accept overwriting MCU firmware; no automatic backup/restore is available",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
 
     args = parser.parse_args()

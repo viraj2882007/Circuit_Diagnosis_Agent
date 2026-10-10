@@ -2,6 +2,7 @@
 Report Generator - Generates diagnostic reports in multiple formats.
 """
 
+import html as html_lib
 import json
 import logging
 from pathlib import Path
@@ -58,6 +59,8 @@ class DiagnosticReport:
     report_path: str = ""
     json_path: str = ""
     html_path: str = ""
+    external_peripherals: List[Dict[str, Any]] = field(default_factory=list)
+    ai_analysis: Optional[str] = None
 
     def __post_init__(self):
         self._compute_totals()
@@ -150,6 +153,8 @@ class ReportGenerator:
         .test-status {{ padding: 4px 12px; border-radius: 4px; color: white; font-weight: bold; }}
         .test-details {{ color: #666; font-size: 0.9em; margin-top: 4px; }}
         .measurements {{ color: #999; font-size: 0.8em; font-family: monospace; }}
+        .ai-analysis {{ white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; padding: 16px; border-radius: 8px; }}
+        .evidence-json {{ white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; padding: 16px; border-radius: 8px; }}
     </style>
 </head>
 <body>
@@ -206,6 +211,26 @@ class ReportGenerator:
 
             html += "</div>"
 
+        if report.external_peripherals:
+            external_json = html_lib.escape(json.dumps(report.external_peripherals, indent=2))
+            html += f"""
+    <section class="suite">
+        <h2>External Peripheral Observations</h2>
+        <p>These are supplied observations/measurements, not independently verified by the host.</p>
+        <pre class="evidence-json">{external_json}</pre>
+    </section>
+"""
+        if report.ai_analysis:
+            ai_text = html_lib.escape(report.ai_analysis)
+            html += f"""
+    <section class="suite">
+        <h2>Nemotron AI Diagnosis</h2>
+        <p>AI advice is an evidence-based hypothesis, not a replacement for electrical measurements
+        or qualified repair inspection.</p>
+        <pre class="ai-analysis">{ai_text}</pre>
+    </section>
+"""
+
         html += """
 </body>
 </html>
@@ -245,6 +270,22 @@ class ReportGenerator:
                         meas_str = ', '.join(f'{m:.2f}' for m in test.measurements)
                         f.write(f" (Measurements: {meas_str})")
                     f.write(f"\n")
+
+            if report.external_peripherals:
+                f.write("\nEXTERNAL PERIPHERAL OBSERVATIONS\n")
+                f.write(f"{'-'*50}\n")
+                f.write(json.dumps(report.external_peripherals, indent=2))
+                f.write("\n")
+
+            if report.ai_analysis:
+                f.write("\nNEMOTRON AI DIAGNOSIS\n")
+                f.write(f"{'-'*50}\n")
+                f.write(report.ai_analysis)
+                f.write("\n")
+                f.write(
+                    "NOTE: AI analysis is advisory. Confirm suspected faults with "
+                    "appropriate measurements and safety procedures.\n"
+                )
 
             if report.failed > 0:
                 f.write(f"\n{'!'*50}\n")

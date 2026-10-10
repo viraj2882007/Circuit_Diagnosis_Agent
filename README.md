@@ -17,7 +17,7 @@ A comprehensive diagnostic tool for MCU-based projects that automatically tests 
 - **Multi-probe support**: Works with ST-Link, J-Link, CMSIS-DAP, ESP-Prog, Black Magic Probe
 - **Zephyr-based test firmware**: Portable, professional RTOS-based diagnostics
 - **Comprehensive reporting**: HTML, JSON, and text reports with pass/fail analysis
-- **Non-destructive**: Restores original firmware after testing
+- **Flash safety**: refuses to overwrite MCU firmware unless explicitly allowed; automatic restore/erase is not implemented
 - **Extensible**: Easy to add new test suites and MCU families
 
 ## Quick Start
@@ -165,3 +165,58 @@ mcu_diagnostic_agent/
 ## License
 
 MIT License - See LICENSE file for details.
+
+## Nemotron 3 Ultra AI diagnosis and external peripherals
+
+Optional AI analysis uses NVIDIA's OpenAI-compatible NIM endpoint. Create an API key in the
+NVIDIA API catalog and set it in your shell; never commit the key.
+
+PowerShell:
+```powershell
+$env:NVIDIA_API_KEY = "YOUR_NVIDIA_API_KEY"
+```
+
+Run a diagnostic with evidence-based AI interpretation:
+```bash
+python -m mcu_diagnostic_agent stm32 --part STM32F407VG --probe stlink \
+  --allow-firmware-overwrite --ai-analysis --external-observations examples/external-observations.example.json
+```
+
+The firmware overwrite flag is deliberately explicit. The current implementation does not
+back up and restore original MCU firmware; after consent to flashing, the diagnostic firmware
+may remain on the device. Make sure you have a known-good recovery path before using this
+hardware workflow. Cleanup never automatically erases target flash.
+
+### External observation file
+
+The external observation JSON lets a user or a hardware-specific adapter record test evidence
+for connected sensors, displays, EEPROMs, USB devices, and other peripherals. Example:
+
+```json
+{
+  "board": "Example dev board",
+  "peripherals": [
+    {
+      "name": "I2C OLED",
+      "interface": "I2C",
+      "status": "fail",
+      "expected": "ACK at 0x3C",
+      "observed": "No ACK observed at 0x3C",
+      "evidence": ["I2C scan repeated three times with the device powered"],
+      "measurements": {"vcc_v": 3.28},
+      "notes": "Address and supply are from the device datasheet"
+    }
+  ]
+}
+```
+
+Allowed status values are `pass`, `fail`, `warning`, `unknown`, and `not_tested`.
+This JSON is evidence input, not a claim that the host automatically tested a device. Reliable
+automatic external diagnosis requires a supported board/test adapter, correctly wired hardware,
+and device-specific checks. The AI report distinguishes evidence from hypotheses and discusses
+likely causes, how the fault may have occurred, prevention, repairability, and replacement or
+technician escalation when repair is unsafe or unsupported.
+
+The optional `--nemotron-model` argument defaults to
+`nvidia/nemotron-3-ultra-550b-a55b`. AI analysis requires `NVIDIA_API_KEY`; diagnostic and
+external-observation reporting still completes if the AI service is unavailable.

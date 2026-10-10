@@ -1,0 +1,19 @@
+{
+  "board": "Example development board",
+  "peripherals": [
+    {
+      "name": "I2C OLED",
+      "interface": "I2C",
+      "profile": "i2c_device",
+      "status": "fail",
+      "expected": "ACK at 0x3C",
+      "observed": "No ACK at 0x3C after three scans",
+      "measurements": {"vcc_v": 3.28},
+      "evidence": [
+        "Repeated scan with sensor powered",
+        "Supply measured with a multimeter"
+      ],
+      "notes": "Example only; replace with observations from the actual device."
+    }
+  ]
+}
