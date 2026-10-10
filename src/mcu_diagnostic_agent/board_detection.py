@@ -9,7 +9,7 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from serial.tools import list_ports
 
@@ -173,6 +173,13 @@ def detect_connected_debug_probes() -> Tuple[List[Dict[str, Any]], Optional[str]
         return [], "Debug-probe inventory unavailable: {}: {}".format(type(exc).__name__, exc)
 
 
+def _format_probe_id(value: Any) -> str:
+    if isinstance(value, int):
+        return "{:04X}".format(value)
+    text = str(value or "").strip()
+    return text.upper() if text else "????"
+
+
 def _print_detections(detections: List[BoardDetection], debug_probes: List[Dict[str, Any]], probe_error: Optional[str] = None) -> None:
     print("Board discovery (read-only; no reset, firmware upload, or hardware tests performed)")
     print("=" * 78)
@@ -219,8 +226,8 @@ def _print_detections(detections: List[BoardDetection], debug_probes: List[Dict[
                 "- {type} {product} VID:PID={vid}:{pid} serial={serial} backend={backend}".format(
                     type=probe.get("type", "debug probe"),
                     product=probe.get("product") or "unknown product",
-                    vid=str(probe.get("vid") or "????").upper(),
-                    pid=str(probe.get("pid") or "????").upper(),
+                    vid=_format_probe_id(probe.get("vid")),
+                    pid=_format_probe_id(probe.get("pid")),
                     serial=probe.get("serial") or "unknown",
                     backend=probe.get("backend") or "unknown",
                 )
