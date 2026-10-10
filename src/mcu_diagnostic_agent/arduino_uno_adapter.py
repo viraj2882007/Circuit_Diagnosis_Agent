@@ -184,21 +184,26 @@ def _run_manual_tests(
     print("Disconnect shields/peripherals first. Only connect the jumper requested for each test.")
     ready = input("Type READY when all external wiring is removed and you can move one jumper safely: ")
     if ready.strip().lower() != "ready":
-        _add_skipped(gpio_tests, "GPIO loopback series", "GPIO", "User did not confirm safe wiring.")
-        _add_skipped(pwm_tests, "PWM output series", "PWM", "User did not confirm safe wiring.")
-        _add_skipped(adc_tests, "ADC input series", "ADC", "User did not confirm safe wiring.")
-        _add_skipped(spi_tests, "SPI loopback", "SPI", "User did not confirm safe wiring.")
-        _add_skipped(led_tests, "Onboard LED visual check", "Onboard", "User did not confirm safe wiring.")
+        reason = "User did not confirm safe wiring; test was not executed."
+        _add_skipped(gpio_tests, "GPIO loopback series", "GPIO", reason)
+        _add_skipped(pwm_tests, "PWM output series", "PWM", reason)
+        _add_skipped(adc_tests, "ADC input series", "ADC", reason)
+        _add_skipped(spi_tests, "SPI loopback", "SPI", reason)
+        _add_skipped(led_tests, "Onboard LED visual check", "Onboard", reason)
         return
 
+    stop = False
     action = _prompt_run("Run onboard LED blink test; observe the L LED")
     if action == "run":
         lines, elapsed, completed = _send_command(
             ser, "LED", ("LED test sequence complete",), timeout_seconds
         )
         observed = input("Did the onboard L LED blink three times? [y/n]: ").strip().lower()
-        status = "pass" if completed and observed in {"y", "yes"} else "fail"
-        if observed not in {"y", "yes", "n", "no"}:
+        if observed in {"y", "yes"}:
+            status = "pass" if completed else "fail"
+        elif observed in {"n", "no"}:
+            status = "fail"
+        else:
             status = "skip"
         led_tests.append(_test_result(
             "Onboard LED blink",
@@ -208,31 +213,34 @@ def _run_manual_tests(
             elapsed,
         ))
     else:
-        _add_skipped(led_tests, "Onboard LED blink", "Onboard", "User skipped visual confirmation.")
-    if action == "stop":
-        return
+        _add_skipped(
+            led_tests, "Onboard LED blink", "Onboard",
+            "User skipped the test." if action == "skip" else "User stopped remaining manual tests.",
+        )
+        stop = action == "stop"
 
     pairs = [(2, pin) for pin in range(3, 14)] + [(3, 4)]
-    stop = False
     for source, sink in pairs:
         name = "GPIO jumper pair D{}-D{}".format(source, sink)
+        if stop:
+            _add_skipped(gpio_tests, name, "GPIO", "Skipped because the user stopped remaining manual tests.")
+            continue
         action = _prompt_run(
-            "Connect exactly one jumper D{} <-> D{}; run {}".format(
-                source, sink, "PAIR {} {}".format(source, sink)
+            "Connect exactly one jumper D{} <-> D{}; run PAIR {} {}".format(
+                source, sink, source, sink
             )
         )
         if action == "stop":
             stop = True
         if action != "run":
-            _add_skipped(gpio_tests, name, "GPIO", "User skipped or stopped manual pin tests.")
-            if stop:
-                break
+            _add_skipped(
+                gpio_tests, name, "GPIO",
+                "User stopped remaining manual tests." if stop else "User skipped; no measurement made.",
+            )
             continue
+
         lines, elapsed, completed = _send_command(
-            ser,
-            "PAIR {} {}".format(source, sink),
-            ("PAIR RESULT:",),
-            timeout_seconds,
+            ser, "PAIR {} {}".format(source, sink), ("PAIR RESULT:",), timeout_seconds
         )
         direction_results = parse_pair_results(lines)
         if not completed or not direction_results:
@@ -244,25 +252,15 @@ def _run_manual_tests(
         else:
             for direction_name, status, evidence_line in direction_results:
                 gpio_tests.append(_test_result(
-                    direction_name,
-                    "GPIO",
-                    status,
-                    evidence_line,
+                    direction_name, "GPIO", status, evidence_line,
                     elapsed / max(len(direction_results), 1),
                 ))
-        if stop:
-            break
-
-    if stop:
-        for pin in (3, 5, 6, 9, 10, 11):
-            _add_skipped(pwm_tests, "PWM output D{}".format(pin), "PWM", "Manual tests stopped by user.")
-        for pin in range(6):
-            for level in ("LOW", "HIGH"):
-                _add_skipped(adc_tests, "ADC A{} {}".format(pin, level), "ADC", "Manual tests stopped by user.")
-        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "Manual tests stopped by user.")
-        return
 
     for pwm_pin in (3, 5, 6, 9, 10, 11):
+        name = "PWM output D{}".format(pwm_pin)
+        if stop:
+            _add_skipped(pwm_tests, name, "PWM", "Skipped because the user stopped remaining manual tests.")
+            continue
         action = _prompt_run(
             "Connect jumper D{} (PWM output) <-> D2 (input); run PWM {} 2".format(
                 pwm_pin, pwm_pin
@@ -271,34 +269,29 @@ def _run_manual_tests(
         if action == "stop":
             stop = True
         if action != "run":
-            _add_skipped(pwm_tests, "PWM output D{}".format(pwm_pin), "PWM", "User skipped PWM check.")
-            if stop:
-                break
+            _add_skipped(
+                pwm_tests, name, "PWM",
+                "User stopped remaining manual tests." if stop else "User skipped; no measurement made.",
+            )
             continue
+
         lines, elapsed, completed = _send_command(
             ser, "PWM {} 2".format(pwm_pin), ("PWM RESULT:",), timeout_seconds
         )
         result_line = next((line for line in lines if "PWM RESULT:" in line), "")
         status = "pass" if completed and "PWM RESULT: PASS" in result_line else "fail"
         pwm_tests.append(_test_result(
-            "PWM output D{}".format(pwm_pin),
-            "PWM",
-            status,
+            name, "PWM", status,
             result_line or "No PWM result received. Output: {}".format(" | ".join(lines)),
             elapsed,
         ))
-        if stop:
-            break
-
-    if stop:
-        for pin in range(6):
-            for level in ("LOW", "HIGH"):
-                _add_skipped(adc_tests, "ADC A{} {}".format(pin, level), "ADC", "Manual tests stopped by user.")
-        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "Manual tests stopped by user.")
-        return
 
     for analog_index in range(6):
         for level, rail in (("LOW", "GND"), ("HIGH", "5V")):
+            name = "ADC A{} {}".format(analog_index, level)
+            if stop:
+                _add_skipped(adc_tests, name, "ADC", "Skipped because the user stopped remaining manual tests.")
+                continue
             action = _prompt_run(
                 "Connect A{} to {} only (never bridge 5V to GND); run ADC A{} {}".format(
                     analog_index, rail, analog_index, level
@@ -308,43 +301,35 @@ def _run_manual_tests(
                 stop = True
             if action != "run":
                 _add_skipped(
-                    adc_tests,
-                    "ADC A{} {}".format(analog_index, level),
-                    "ADC",
-                    "User skipped ADC check; no measurement made.",
+                    adc_tests, name, "ADC",
+                    "User stopped remaining manual tests." if stop else "User skipped; no measurement made.",
                 )
-                if stop:
-                    break
                 continue
+
             lines, elapsed, completed = _send_command(
-                ser, "ADC A{} {}".format(analog_index, level), ("=> PASS", "=> FAIL", "ERROR:"),
-                timeout_seconds,
+                ser, "ADC A{} {}".format(analog_index, level),
+                ("=> PASS", "=> FAIL", "ERROR:"), timeout_seconds,
             )
             result_line = next(
-                (line for line in lines if line.startswith("ADC A{}".format(analog_index))),
+                (line for line in lines if line.startswith("ADC A{} ".format(analog_index))),
                 "",
             )
             status = "pass" if completed and result_line.endswith("=> PASS") else "fail"
             if "ERROR:" in result_line:
                 status = "fail"
-            adc_value_match = re.search(r"average analogRead=(\d+)", result_line)
+            adc_value_match = re.search(r"average analogRead=(\\d+)", result_line)
             measurements = [float(adc_value_match.group(1))] if adc_value_match else []
             adc_tests.append(_test_result(
-                "ADC A{} {}".format(analog_index, level),
-                "ADC",
-                status,
+                name, "ADC", status,
                 result_line or "No ADC result received. Output: {}".format(" | ".join(lines)),
-                elapsed,
-                measurements,
+                elapsed, measurements,
             ))
-            if stop:
-                break
-        if stop:
-            break
 
     if stop:
-        _add_skipped(adc_tests, "Remaining ADC checks", "ADC", "Manual tests stopped by user.")
-        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "Manual tests stopped by user.")
+        _add_skipped(
+            spi_tests, "SPI MOSI/MISO loopback", "SPI",
+            "Skipped because the user stopped remaining manual tests.",
+        )
         return
 
     action = _prompt_run("Connect D11 MOSI <-> D12 MISO; disconnect external SPI devices")
@@ -355,15 +340,15 @@ def _run_manual_tests(
         result_line = next((line for line in lines if "SPI_LOOPBACK RESULT:" in line), "")
         status = "pass" if completed and "SPI_LOOPBACK RESULT: PASS" in result_line else "fail"
         spi_tests.append(_test_result(
-            "SPI MOSI/MISO loopback",
-            "SPI",
-            status,
+            "SPI MOSI/MISO loopback", "SPI", status,
             result_line or "No SPI result received. Output: {}".format(" | ".join(lines)),
             elapsed,
         ))
     else:
-        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "User skipped SPI check.")
-
+        _add_skipped(
+            spi_tests, "SPI MOSI/MISO loopback", "SPI",
+            "User stopped remaining manual tests." if action == "stop" else "User skipped; no measurement made.",
+        )
 
 def run_diagnostic(
     detection: BoardDetection,
