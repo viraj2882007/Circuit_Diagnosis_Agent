@@ -68,7 +68,7 @@ def _test_result(
     suite: str,
     status: str,
     details: str,
-    duration_ms: float = 0.0,
+    duration_ms: Optional[float] = None,
     measurements: Optional[List[float]] = None,
 ) -> TestResultData:
     return TestResultData(
@@ -78,18 +78,24 @@ def _test_result(
         duration_ms=duration_ms,
         details=details,
         measurements=measurements or [],
-        timestamp=time.time(),
+        timestamp=time.time_ns() / 1_000_000_000,
     )
 
 
 def _make_suite(name: str, tests: List[TestResultData]) -> SuiteResultData:
+    measured = [test.duration_ms for test in tests]
+    suite_duration = (
+        sum(value for value in measured if value is not None)
+        if tests and all(value is not None for value in measured)
+        else None
+    )
     return SuiteResultData(
         name=name,
         tests=tests,
         passed=sum(test.status == "pass" for test in tests),
         failed=sum(test.status in {"fail", "error"} for test in tests),
         skipped=sum(test.status in {"skip", "skipped"} for test in tests),
-        duration_ms=sum(test.duration_ms for test in tests),
+        duration_ms=suite_duration,
     )
 
 
@@ -419,7 +425,7 @@ def run_diagnostic(
     if profile is None or profile.board_id != "arduino_uno_r3":
         raise RuntimeError("The Uno serial adapter requires an exact Arduino Uno R3 profile match.")
 
-    start_time = time.time()
+    start_time = time.perf_counter()
     host_tests = [
         _test_result(
             "USB serial board identity",
@@ -475,9 +481,9 @@ def run_diagnostic(
                     ser, "INFO", (_INFO_MARKER,), timeout_seconds
                 )
                 info = "\n".join(lines)
-                if not completed or "BOARD:ARDUINO_UNO_R3" not in info or "FIRMWARE_VERSION:2" not in info:
+                if not completed or "BOARD:ARDUINO_UNO_R3" not in info or "FIRMWARE_VERSION:3" not in info:
                     raise RuntimeError(
-                        "The port is an Uno R3, but it did not confirm diagnostic firmware version 2. "
+                        "The port is an Uno R3, but it did not confirm diagnostic firmware version 3. "
                         "No other tests were run."
                     )
                 firmware_tests.append(_test_result(
@@ -662,8 +668,12 @@ def run_diagnostic(
         test_suites=test_suites,
         suites=suites,
         external_peripherals=external,
-        duration=time.time() - start_time,
-        firmware_version=2,
+        duration=time.perf_counter() - start_time,
+        firmware_version=3,
+        device_id=(
+            detection.hwid
+            or "USB:{:04X}:{:04X}@{}".format(detection.vid or 0, detection.pid or 0, detection.port)
+        ),
     )
 
     if ai_analysis:
