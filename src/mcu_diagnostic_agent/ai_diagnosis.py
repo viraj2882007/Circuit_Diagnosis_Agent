@@ -33,15 +33,21 @@ by missing external jumpers or wiring, not necessarily a dead peripheral. A miss
 can have several causes (power, wiring, pull-ups, address, bus configuration, or device failure).
 Do not turn correlation into certainty.
 
-For repairability, choose a careful outcome: 'likely repairable', 'replace the module/device',
-'not safely repairable by a general user', or 'insufficient evidence'. Give repair steps only for
-low-risk, plausible repairs supported by evidence (for example, checking unpowered connectors,
-cables, orientation, or datasheet-approved wiring). Do not advise live probing or soldering on
-powered circuits, mains circuits, high-energy systems, or unknown battery packs. For sealed,
-safety-critical, burnt, cracked, liquid-damaged, or uncertain high-energy devices, recommend
-disconnecting power and qualified service or replacement as appropriate. Do not say a component is
-repairable merely because a possible procedure exists. Explain when component replacement is more
-practical than board-level repair. Never invent part numbers, voltages, pinouts, costs, or certainty.
+When there are no failed tests and no failed external observations, the correct outcome is
+"No fault found in the tests performed." Do not manufacture a fault cause, claim a repair is needed,
+or say "likely repairable". State that repair/replacement is not indicated by the current evidence,
+then list only explicitly untested or skipped features and the evidence limitations. Do not invent
+socketed-package revisions, board revisions, connector layouts, or components not present in evidence.
+
+For repairability when faults exist, choose a careful outcome: 'likely repairable', 'replace the
+module/device', 'not safely repairable by a general user', or 'insufficient evidence'. Give repair
+steps only for low-risk, plausible repairs supported by evidence (for example, checking unpowered
+connectors, cables, orientation, or datasheet-approved wiring). Include a safety warning only when
+relevant to the tested device or observed fault; do not append generic cautions about unrelated
+battery packs, mains circuits, or high-energy systems to a low-voltage Arduino report. Never advise
+live probing or soldering on powered circuits. Do not say a component is repairable merely because a
+possible procedure exists. Explain when replacement is more practical than board-level repair.
+Never invent part numbers, voltages, pinouts, costs, board revisions, or certainty.
 """
 
 def _compact_evidence(report: Mapping[str, Any]) -> dict[str, Any]:
@@ -82,6 +88,85 @@ def _compact_evidence(report: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _all_pass_summary(report: Mapping[str, Any]) -> str | None:
+    """Return a deterministic no-fault summary when evidence contains no failures.
+
+    Skipped and unknown tests are explicitly left untested. Empty reports do not
+    qualify, and warnings/failures still go to Nemotron for a fault-focused analysis.
+    """
+    suites = report.get("suites", []) or []
+    test_rows: list[dict[str, Any]] = []
+    for suite in suites:
+        test_rows.extend(suite.get("tests", []) or [])
+
+    external = report.get("external_peripherals", []) or []
+    statuses = [str(test.get("status", "unknown")).lower() for test in test_rows]
+    external_statuses = [str(item.get("status", "unknown")).lower() for item in external]
+    all_statuses = statuses + external_statuses
+    if not all_statuses or not any(status == "pass" for status in all_statuses):
+        return None
+    if any(status in {"fail", "failed", "error", "warning"} for status in all_statuses):
+        return None
+
+    passed = [
+        (str(test.get("name", "unnamed test")), str(test.get("details", "")).strip())
+        for test in test_rows
+        if str(test.get("status", "")).lower() == "pass"
+    ]
+    passed_external = [
+        (str(item.get("name", "unnamed peripheral")), str(item.get("observed", "")).strip())
+        for item in external
+        if str(item.get("status", "")).lower() == "pass"
+    ]
+    skipped = [
+        str(test.get("name", "unnamed test"))
+        for test in test_rows
+        if str(test.get("status", "")).lower() in {"skip", "skipped", "unknown", "not_tested"}
+    ]
+    untested = [str(item) for item in (report.get("untested_peripherals", []) or [])]
+    untested.extend(
+        str(item.get("name", "unnamed peripheral"))
+        for item in external
+        if str(item.get("status", "")).lower() in {"unknown", "not_tested"}
+    )
+
+    family = str(report.get("mcu_family", "unknown"))
+    part = str(report.get("mcu_part", "unknown"))
+    lines = [
+        "[DETERMINISTIC_ALL_PASS_SUMMARY]",
+        "# All-pass diagnostic summary",
+        "",
+        "## Verdict",
+        "No fault was found in the tests performed on {} {}.".format(family, part),
+        "Repair or replacement is not indicated by this evidence. This deterministic summary was",
+        "used instead of a generative repair diagnosis because no recorded failures require a cause analysis.",
+        "",
+        "## Confirmed passes",
+    ]
+    if passed:
+        lines.extend("- {}{}".format(name, ": " + details if details else "") for name, details in passed[:80])
+    if passed_external:
+        lines.extend(
+            "- External peripheral {}{}".format(name, ": " + details if details else "")
+            for name, details in passed_external[:40]
+        )
+    lines.extend(["", "## What remains untested"])
+    untested_items = list(dict.fromkeys(untested + skipped))
+    if untested_items:
+        lines.extend("- {}".format(item) for item in untested_items[:100])
+    else:
+        lines.append("- Any peripheral, pin, or behavior not explicitly listed in the passed test results.")
+    lines.extend([
+        "",
+        "## Evidence limits",
+        "- A pass confirms only the named check under the stated wiring and test conditions.",
+        "- Missing tests and skipped tests are not passes and are not failures; their status is unknown.",
+        "- No repair steps or replacement recommendation are warranted unless a later test identifies a fault.",
+        "- This all-pass summary is deterministic; NVIDIA Nemotron was not called for this run.",
+    ])
+    return "\\n".join(lines)
+
+
 def generate_ai_analysis(
     report: Mapping[str, Any],
     *,
@@ -90,6 +175,10 @@ def generate_ai_analysis(
     timeout: float = 90.0,
 ) -> str:
     """Call the NVIDIA NIM chat-completions endpoint and return a Markdown analysis."""
+    deterministic_summary = _all_pass_summary(report)
+    if deterministic_summary is not None:
+        return deterministic_summary
+
     token = api_key or os.getenv("NVIDIA_API_KEY")
     if not token:
         raise RuntimeError(
@@ -117,8 +206,8 @@ def generate_ai_analysis(
                 ),
             },
         ],
-        "temperature": 0.2,
-        "top_p": 0.9,
+        "temperature": 0.0,
+        "top_p": 1.0,
         "max_tokens": 4096,
         "stream": False,
     }
