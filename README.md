@@ -61,8 +61,8 @@ python -m mcu_diagnostic_agent esp32 --suites basic,gpio,analog,communication
 # RP2040 with higher debug frequency
 python -m mcu_diagnostic_agent rp2040 --freq 4000
 
-# Arduino Uno via UART bootloader
-python -m mcu_diagnostic_agent arduino --part ATMEGA328P --interface uart --probe /dev/ttyUSB0
+# Arduino Uno R3 (manual sketch upload + board-specific test runner)
+mcu-uno-test --port COM9
 
 # Use pre-built firmware (skip Zephyr build)
 python -m mcu_diagnostic_agent stm32 --firmware ./build/zephyr/zephyr.bin
