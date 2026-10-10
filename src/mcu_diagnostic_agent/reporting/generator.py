@@ -132,13 +132,13 @@ class ReportGenerator:
     def _generate_json(self, report: DiagnosticReport, path: Path) -> None:
         """Generate JSON report."""
         data = asdict(report)
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
 
     def _generate_html(self, report: DiagnosticReport, path: Path) -> None:
         """Generate HTML report."""
         html = self._build_html(report)
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(html)
 
     def _build_html(self, report: DiagnosticReport) -> str:
@@ -262,7 +262,7 @@ class ReportGenerator:
 
     def _generate_text(self, report: DiagnosticReport, path: Path) -> None:
         """Generate text summary report."""
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(f"MCU Diagnostic Report\n")
             f.write(f"{'='*50}\n\n")
             f.write(f"MCU: {report.mcu_family} {report.mcu_part}\n")
