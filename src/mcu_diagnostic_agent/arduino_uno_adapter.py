@@ -317,7 +317,7 @@ def _run_manual_tests(
             status = "pass" if completed and result_line.endswith("=> PASS") else "fail"
             if "ERROR:" in result_line:
                 status = "fail"
-            adc_value_match = re.search(r"average analogRead=(\\d+)", result_line)
+            adc_value_match = re.search(r"average analogRead=(\d+)", result_line)
             measurements = [float(adc_value_match.group(1))] if adc_value_match else []
             adc_tests.append(_test_result(
                 name, "ADC", status,
