@@ -60,6 +60,10 @@ class DiagnosticReport:
     json_path: str = ""
     html_path: str = ""
     external_peripherals: List[Dict[str, Any]] = field(default_factory=list)
+    external_passed: int = 0
+    external_failed: int = 0
+    external_warnings: int = 0
+    external_unknown: int = 0
     ai_analysis: Optional[str] = None
 
     def __post_init__(self):
@@ -77,6 +81,22 @@ class DiagnosticReport:
             self.passed += suite.passed
             self.failed += suite.failed
             self.skipped += suite.skipped
+
+        # Keep external observations separate from MCU test-case totals but expose their
+        # outcomes explicitly so callers cannot mistake a peripheral failure for a clean run.
+        self.external_passed = sum(
+            1 for item in self.external_peripherals if item.get("status") == "pass"
+        )
+        self.external_failed = sum(
+            1 for item in self.external_peripherals if item.get("status") == "fail"
+        )
+        self.external_warnings = sum(
+            1 for item in self.external_peripherals if item.get("status") == "warning"
+        )
+        self.external_unknown = sum(
+            1 for item in self.external_peripherals
+            if item.get("status") in {"unknown", "not_tested"}
+        )
 
 
 class ReportGenerator:
@@ -216,6 +236,9 @@ class ReportGenerator:
             html += f"""
     <section class="suite">
         <h2>External Peripheral Observations</h2>
+        <p>Recorded: {len(report.external_peripherals)} · Passed: {report.external_passed} ·
+        Failed: {report.external_failed} · Warnings: {report.external_warnings} ·
+        Unknown/not tested: {report.external_unknown}</p>
         <p>These are supplied observations/measurements, not independently verified by the host.</p>
         <pre class="evidence-json">{external_json}</pre>
     </section>
@@ -274,6 +297,11 @@ class ReportGenerator:
             if report.external_peripherals:
                 f.write("\nEXTERNAL PERIPHERAL OBSERVATIONS\n")
                 f.write(f"{'-'*50}\n")
+                f.write(f"Recorded: {len(report.external_peripherals)}\n")
+                f.write(f"Passed: {report.external_passed}\n")
+                f.write(f"Failed: {report.external_failed}\n")
+                f.write(f"Warnings: {report.external_warnings}\n")
+                f.write(f"Unknown/not tested: {report.external_unknown}\n\n")
                 f.write(json.dumps(report.external_peripherals, indent=2))
                 f.write("\n")
 
