@@ -315,9 +315,15 @@ async def main_async(args: argparse.Namespace) -> int:
     print(f"MCU: {report.mcu_family} {report.mcu_part}")
     print(f"Duration: {report.duration:.1f}s")
     print(f"Tests: {report.total_tests} ({report.passed} passed, {report.failed} failed, {report.skipped} skipped)")
+    if report.external_peripherals:
+        print(
+            f"External peripherals: {len(report.external_peripherals)} recorded "
+            f"({report.external_passed} passed, {report.external_failed} failed, "
+            f"{report.external_warnings} warnings, {report.external_unknown} unknown/not tested)"
+        )
     print(f"Report: {report.report_path}")
 
-    return 0 if report.failed == 0 else 1
+    return 0 if report.failed == 0 and report.external_failed == 0 else 1
 
 
 def main() -> int:
