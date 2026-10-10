@@ -20,10 +20,10 @@ class TestResultData:
     name: str
     suite: str
     status: str
-    duration_ms: float
+    duration_ms: Optional[float]
     details: str
     measurements: List[float]
-    timestamp: float
+    timestamp: Optional[float]
 
 
 @dataclass
@@ -44,7 +44,7 @@ class DiagnosticReport:
     mcu_part: str
     test_suites: List[str]
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    duration: float = 0.0
+    duration: Optional[float] = None
     firmware_version: int = 1
     device_id: str = ""
     suites: List[SuiteResultData] = field(default_factory=list)
@@ -64,6 +64,7 @@ class DiagnosticReport:
     external_failed: int = 0
     external_warnings: int = 0
     external_unknown: int = 0
+    untested_peripherals: List[str] = field(default_factory=list)
     ai_analysis: Optional[str] = None
 
     def __post_init__(self):
@@ -97,6 +98,13 @@ class DiagnosticReport:
             1 for item in self.external_peripherals
             if item.get("status") in {"unknown", "not_tested"}
         )
+
+
+def format_duration(value: Optional[float], suffix: str) -> str:
+    """Format a measured duration or make missing timing explicit."""
+    if value is None:
+        return "not captured"
+    return "{:.1f}{}".format(value, suffix)
 
 
 class ReportGenerator:
@@ -180,7 +188,7 @@ class ReportGenerator:
         <h1>MCU Diagnostic Report</h1>
         <p><strong>MCU:</strong> {html_lib.escape(str(report.mcu_family))} {html_lib.escape(str(report.mcu_part))}</p>
         <p><strong>Date:</strong> {html_lib.escape(str(report.timestamp))}</p>
-        <p><strong>Duration:</strong> {report.duration:.1f}s</p>
+        <p><strong>Duration:</strong> {format_duration(report.duration, 's')}</p>
         <p><strong>Firmware Version:</strong> {report.firmware_version}</p>
         <p><strong>Device ID:</strong> {html_lib.escape(str(report.device_id))}</p>
         <p><strong>Test Suites:</strong> {html_lib.escape(', '.join(report.test_suites))}</p>
@@ -241,16 +249,20 @@ class ReportGenerator:
         <pre class="evidence-json">{external_json}</pre>
     </section>
 """
+        if report.untested_peripherals:
+            untested_items = "".join("<li>{}</li>".format(html_lib.escape(str(item))) for item in report.untested_peripherals)
+            html += f"""\n    <section class="suite">\n        <h2>Untested / Not Verified</h2>\n        <ul>{untested_items}</ul>\n    </section>\n"""
+
         if report.ai_analysis:
-            ai_text = html_lib.escape(report.ai_analysis)
-            html += f"""
-    <section class="suite">
-        <h2>Nemotron AI Diagnosis</h2>
-        <p>AI advice is an evidence-based hypothesis, not a replacement for electrical measurements
-        or qualified repair inspection.</p>
-        <pre class="ai-analysis">{ai_text}</pre>
-    </section>
-"""
+            deterministic = report.ai_analysis.startswith("[DETERMINISTIC_ALL_PASS_SUMMARY]")
+            ai_text = html_lib.escape(report.ai_analysis.replace("[DETERMINISTIC_ALL_PASS_SUMMARY]", "", 1).strip())
+            heading = "All-Pass Evidence Summary (Nemotron not called)" if deterministic else "Nemotron AI Diagnosis"
+            note = (
+                "No failures were recorded; a deterministic evidence summary is used to avoid unsupported repair advice."
+                if deterministic else
+                "AI advice is an evidence-based hypothesis, not a replacement for electrical measurements or qualified repair inspection."
+            )
+            html += f"""\n    <section class="suite">\n        <h2>{heading}</h2>\n        <p>{note}</p>\n        <pre class="ai-analysis">{ai_text}</pre>\n    </section>\n"""
 
         html += """
 </body>
@@ -265,7 +277,7 @@ class ReportGenerator:
             f.write(f"{'='*50}\n\n")
             f.write(f"MCU: {report.mcu_family} {report.mcu_part}\n")
             f.write(f"Date: {report.timestamp}\n")
-            f.write(f"Duration: {report.duration:.1f}s\n")
+            f.write("Duration: {}\n".format(format_duration(report.duration, "s")))
             f.write(f"Firmware Version: {report.firmware_version}\n")
             f.write(f"Device ID: {report.device_id}\n")
             f.write(f"Test Suites: {', '.join(report.test_suites)}\n\n")
@@ -280,7 +292,7 @@ class ReportGenerator:
             for suite in report.suites:
                 f.write(f"\nSuite: {suite.name}\n")
                 f.write(f"  Passed: {suite.passed}, Failed: {suite.failed}, Skipped: {suite.skipped}\n")
-                f.write(f"  Duration: {suite.duration_ms:.1f}ms\n")
+                f.write("  Duration: {}\n".format(format_duration(suite.duration_ms, "ms")))
 
                 for test in suite.tests:
                     status_str = test.status.upper()
@@ -303,17 +315,27 @@ class ReportGenerator:
                 f.write(json.dumps(report.external_peripherals, indent=2))
                 f.write("\n")
 
-            if report.ai_analysis:
-                f.write("\nNEMOTRON AI DIAGNOSIS\n")
+            if report.untested_peripherals:
+                f.write("\nUNTESTED / NOT VERIFIED\n")
                 f.write(f"{'-'*50}\n")
-                f.write(report.ai_analysis)
-                f.write("\n")
-                f.write(
-                    "NOTE: AI analysis is advisory. Confirm suspected faults with "
-                    "appropriate measurements and safety procedures.\n"
-                )
+                for item in report.untested_peripherals:
+                    f.write("- {}\n".format(item))
 
-            if report.failed > 0:
+            if report.ai_analysis:
+                deterministic = report.ai_analysis.startswith("[DETERMINISTIC_ALL_PASS_SUMMARY]")
+                heading = "ALL-PASS EVIDENCE SUMMARY (NEMOTRON NOT CALLED)" if deterministic else "NEMOTRON AI DIAGNOSIS"
+                f.write("\n{}\n".format(heading))
+                f.write(f"{'-'*50}\n")
+                analysis_text = report.ai_analysis.replace("[DETERMINISTIC_ALL_PASS_SUMMARY]", "", 1).strip()
+                f.write(analysis_text)
+                f.write("\n")
+                if not deterministic:
+                    f.write(
+                        "NOTE: AI analysis is advisory. Confirm suspected faults with "
+                        "appropriate measurements and safety procedures.\n"
+                    )
+
+            if report.failed > 0 or report.external_failed > 0:
                 f.write(f"\n{'!'*50}\n")
                 f.write(f"FAILED TESTS DETECTED - Hardware may be defective\n")
                 f.write(f"{'!'*50}\n")
