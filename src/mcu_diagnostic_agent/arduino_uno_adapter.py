@@ -441,6 +441,7 @@ def run_diagnostic(
                     i2c_tests.append(_test_result("I2C address scan", "I2C", status, details, elapsed))
                     for address in addresses:
                         matched_profile = None
+                        matched_value = None
                         identity_evidence = []
                         candidate_profiles = profiles_for_i2c_address(address) if identify_i2c else []
                         registers = sorted({profile.identity_register for profile in candidate_profiles})
@@ -462,6 +463,7 @@ def run_diagnostic(
                                 candidate = match_i2c_identity(address, register, value)
                                 if candidate is not None:
                                     matched_profile = candidate
+                                    matched_value = value
                                     i2c_tests.append(_test_result(
                                         "{} chip identity at 0x{:02X}".format(candidate.display_name, address),
                                         "I2C",
@@ -480,10 +482,8 @@ def run_diagnostic(
                                 "status": "not_tested",
                                 "expected": "Device-specific functional checks beyond chip ID",
                                 "observed": (
-                                    "ACK at 0x{:02X}; identity register 0x{:02X} matched 0x{:02X}."
-                                    .format(address, matched_profile.identity_register,
-                                            next(value for value in matched_profile.expected_values
-                                                 if value == int(value_match.group(1), 16)))
+                                    "ACK at 0x{:02X}; identity register 0x{:02X} returned 0x{:02X}."
+                                    .format(address, matched_profile.identity_register, matched_value)
                                 ),
                                 "measurements": {},
                                 "evidence": [
