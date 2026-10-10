@@ -304,6 +304,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             print("Board: {} ({})".format(plan["board"]["display_name"], plan["board"]["mcu_part"]))
             print("Plan only: no tests executed and no hardware changed.")
+            print(
+                "Execution adapter: {}".format(
+                    "available" if plan["adapter"]["implementation_available"] else "not implemented yet"
+                )
+            )
+            print(plan["adapter"]["note"])
             print(plan["warning"])
             print()
             for test in plan["tests"]:
