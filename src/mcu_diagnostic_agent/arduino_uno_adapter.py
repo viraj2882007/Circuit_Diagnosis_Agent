@@ -93,7 +93,10 @@ def _make_suite(name: str, tests: List[TestResultData]) -> SuiteResultData:
     )
 
 
-def _choose_port(requested_port: Optional[str]) -> BoardDetection:
+def _choose_port(
+    requested_port: Optional[str],
+    confirmed_board_id: Optional[str] = None,
+) -> BoardDetection:
     detections = detect_connected_boards()
     exact_matches = [item for item in detections if item.profile_id == "arduino_uno_r3"]
     if requested_port:
@@ -103,18 +106,43 @@ def _choose_port(requested_port: Optional[str]) -> BoardDetection:
         )
         if found is None:
             raise RuntimeError("Serial port {} was not found.".format(requested_port))
-        if found.profile_id != "arduino_uno_r3":
-            raise RuntimeError(
-                "Port {} does not have an exact Arduino Uno R3 USB profile match. "
-                "Refusing to send Uno-specific commands.".format(requested_port)
+        if found.profile_id == "arduino_uno_r3":
+            if confirmed_board_id and confirmed_board_id != "arduino_uno_r3":
+                raise RuntimeError(
+                    "The USB identity matched Arduino Uno R3, so the requested manual "
+                    "profile {} conflicts with detected evidence.".format(confirmed_board_id)
+                )
+            return found
+        if confirmed_board_id == "arduino_uno_r3":
+            # Explicit user choice lets a generic USB bridge be treated as a candidate,
+            # but the MCU signature and diagnostic firmware handshake still must pass.
+            return BoardDetection(
+                port=found.port,
+                description=found.description,
+                hwid=found.hwid,
+                vid=found.vid,
+                pid=found.pid,
+                profile_id="arduino_uno_r3",
+                candidate_profile_id=found.candidate_profile_id,
+                confidence="user_confirmed",
+                match_method="explicit_user_confirmation",
+                evidence=found.evidence + [
+                    "User explicitly selected Arduino Uno R3; MCU signature and firmware handshake remain required."
+                ],
             )
-        return found
+        raise RuntimeError(
+            "Port {} does not have an exact Arduino Uno R3 USB profile match. "
+            "For a known Uno clone only, specify --confirm-board arduino_uno_r3; "
+            "signature and firmware checks will still be required.".format(requested_port)
+        )
+    if confirmed_board_id:
+        raise RuntimeError("--confirm-board requires --port so the explicit choice is scoped to one device.")
     if len(exact_matches) == 1:
         return exact_matches[0]
     if not exact_matches:
         raise RuntimeError(
             "No exact Arduino Uno R3 USB identity detected. Connect a supported Uno R3 "
-            "or explicitly confirm/add a profile for a clone/unknown USB bridge."
+            "or use --port COMx --confirm-board arduino_uno_r3 for a known compatible clone."
         )
     raise RuntimeError(
         "More than one Uno R3 profile was detected; specify one with --port."
@@ -609,6 +637,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         description="Run the board-specific diagnostic sketch on an Arduino Uno R3."
     )
     parser.add_argument("--port", help="Serial port (e.g. COM9); auto-selects only if exactly one Uno R3 is detected.")
+    parser.add_argument("--confirm-board", choices=["arduino_uno_r3"], help="Explicitly select the Uno profile for a known clone with an unrecognized USB bridge; still requires chip signature and firmware identity checks.")
     parser.add_argument("--output", default="./results/arduino_uno_r3", help="Directory for TXT/HTML/JSON reports.")
     parser.add_argument("--interactive", action="store_true", help="Run GPIO, PWM, ADC, LED and SPI tests with jumper prompts.")
     parser.add_argument("--scan-i2c", action="store_true", help="Scan I2C addresses after explicit voltage/wiring confirmation.")
@@ -624,13 +653,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        detection = _choose_port(args.port)
+        detection = _choose_port(args.port, args.confirm_board)
         print(
             "Detected {} ({}) on {} using exact USB identity.".format(
                 detection.profile.display_name, detection.profile.mcu_part, detection.port
             )
         )
-        print("This runner does not upload firmware. Opening the serial port usually auto-resets the board.")
+        print("This runner does not upload firmware. AVRDUDE signature checks and opening the serial port may reset the board.")
         if not args.yes_reset:
             confirmation = input("Type RESET to continue; anything else cancels: ")
             if confirmation.strip().upper() != "RESET":
