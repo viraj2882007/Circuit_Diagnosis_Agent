@@ -452,6 +452,7 @@ def run_diagnostic(
             signature_elapsed,
         ))
     else:
+        signature_status = "skip"
         chip_tests.append(_test_result(
             "ATmega328P device signature",
             "Chip identification",
