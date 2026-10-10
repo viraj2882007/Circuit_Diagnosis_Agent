@@ -46,6 +46,7 @@ viz = [
 
 [project.scripts]
 mcu-diag = "mcu_diagnostic_agent.orchestrator.agent:main"
+mcu-board = "mcu_diagnostic_agent.board_detection:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
