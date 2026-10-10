@@ -47,7 +47,7 @@ void printHelp() {
 void printInfo() {
   Serial.println(F("BOARD:ARDUINO_UNO_R3"));
   Serial.println(F("MCU:ATmega328P"));
-  Serial.println(F("FIRMWARE_VERSION:2"));
+  Serial.println(F("FIRMWARE_VERSION:3"));
   Serial.println(F("CAPABILITIES:GPIO,ADC,PWM,I2C_SCAN,SPI_LOOPBACK,LED"));
   Serial.println(F("INFO RESULT: PASS"));
 }
@@ -69,6 +69,7 @@ bool isDigitalTestPin(int pin) {
 }
 
 bool testDirection(uint8_t sourcePin, uint8_t inputPin) {
+  unsigned long testStarted = millis();
   pinMode(sourcePin, INPUT);
   digitalWrite(sourcePin, LOW);
   pinMode(inputPin, INPUT_PULLUP);
@@ -88,10 +89,12 @@ bool testDirection(uint8_t sourcePin, uint8_t inputPin) {
   pinMode(inputPin, INPUT);
 
   bool pass = (lowRead == LOW && highRead == HIGH);
+  unsigned long elapsedMs = millis() - testStarted;
   Serial.print(F("D")); Serial.print(sourcePin);
   Serial.print(F(" output -> D")); Serial.print(inputPin);
   Serial.print(F(" input: LOW phase read=")); Serial.print(lowRead);
   Serial.print(F(", HIGH phase read=")); Serial.print(highRead);
+  Serial.print(F(", duration_ms=")); Serial.print(elapsedMs);
   Serial.print(F(" => ")); Serial.println(pass ? F("PASS") : F("FAIL"));
   return pass;
 }
@@ -125,6 +128,7 @@ void testPwm(int pwmPin, int inputPin) {
     return;
   }
 
+  unsigned long testStarted = millis();
   Serial.print(F("Testing PWM D")); Serial.print(pwmPin);
   Serial.print(F(" -> input D")); Serial.println(inputPin);
   pinMode(pwmPin, OUTPUT);
@@ -148,9 +152,11 @@ void testPwm(int pwmPin, int inputPin) {
   Serial.print(F("Samples: HIGH=")); Serial.print(highSamples);
   Serial.print(F(" LOW=")); Serial.println(lowSamples);
   bool pass = highSamples > 20 && lowSamples > 20;
+  unsigned long elapsedMs = millis() - testStarted;
   Serial.print(F("PWM RESULT: "));
-  Serial.println(pass ? F("PASS - both HIGH and LOW levels observed") :
-                        F("FAIL - jumper, pin or PWM output needs checking"));
+  Serial.print(pass ? F("PASS - both HIGH and LOW levels observed") :
+                      F("FAIL - jumper, pin or PWM output needs checking"));
+  Serial.print(F("; duration_ms=")); Serial.println(elapsedMs);
   Serial.println(F("This is a basic functional check, not a precision frequency/duty-cycle measurement."));
 }
 
@@ -175,6 +181,7 @@ void testAdc(const char *pinArg, const char *expectedArg) {
     return;
   }
 
+  unsigned long testStarted = millis();
   pinMode(analogPin, INPUT);
   long total = 0;
   for (int i = 0; i < 16; ++i) {
@@ -183,11 +190,13 @@ void testAdc(const char *pinArg, const char *expectedArg) {
   }
   int value = (int)(total / 16);
   bool pass = expectLow ? (value <= 20) : (value >= 1000);
+  unsigned long elapsedMs = millis() - testStarted;
 
   Serial.print(F("ADC ")); Serial.print(pinArg);
   Serial.print(F(" expected ")); Serial.print(expectedArg);
   Serial.print(F("; average analogRead=")); Serial.print(value);
-  Serial.print(F(" / 1023 => "));
+  Serial.print(F(" / 1023; duration_ms=")); Serial.print(elapsedMs);
+  Serial.print(F(" => "));
   Serial.println(pass ? F("PASS") : F("FAIL - check wiring and voltage"));
 }
 
