@@ -678,7 +678,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("Text report: {}".format(report.report_path))
     print("HTML report: {}".format(report.html_path))
     print("JSON report: {}".format(report.json_path))
-    if report.failed:
+    if report.failed or report.external_failed:
         return 1
     return 0
 
