@@ -16,6 +16,7 @@ import serial
 
 from .ai_diagnosis import generate_ai_analysis
 from .board_detection import BoardDetection, detect_connected_boards
+from .external_devices import match_i2c_identity, profiles_for_i2c_address
 from .peripheral_observations import load_external_observations
 from .reporting.generator import (
     DiagnosticReport,
@@ -368,6 +369,7 @@ def run_diagnostic(
     output_dir: Path,
     interactive: bool = False,
     scan_i2c: bool = False,
+    identify_i2c: bool = False,
     ai_analysis: bool = False,
     nemotron_model: Optional[str] = None,
     external_observations_path: Optional[Path] = None,
@@ -438,20 +440,77 @@ def run_diagnostic(
                     details = scan_line or "I2C scan timed out. Output: {}".format(" | ".join(lines))
                     i2c_tests.append(_test_result("I2C address scan", "I2C", status, details, elapsed))
                     for address in addresses:
-                        external.append({
-                            "name": "Unidentified I2C peripheral at 0x{:02X}".format(address),
-                            "interface": "I2C",
-                            "profile": "",
-                            "status": "unknown",
-                            "expected": "Device-specific identity/health test",
-                            "observed": "Address 0x{:02X} acknowledged an I2C address probe.".format(address),
-                            "measurements": {},
-                            "evidence": [
-                                "Arduino Uno R3 I2C scanner reported ACK at this address.",
-                                "No device-specific register or functional test was run.",
-                            ],
-                            "notes": "Address acknowledgement does not identify the device or prove it is healthy.",
-                        })
+                        matched_profile = None
+                        identity_evidence = []
+                        candidate_profiles = profiles_for_i2c_address(address) if identify_i2c else []
+                        registers = sorted({profile.identity_register for profile in candidate_profiles})
+                        for register in registers:
+                            read_lines, read_elapsed, read_completed = _send_command(
+                                ser,
+                                "I2C_READ 0x{:02X} 0x{:02X}".format(address, register),
+                                ("I2C_READ RESULT:", "ERROR:"),
+                                timeout_seconds,
+                            )
+                            read_line = next(
+                                (line for line in read_lines if "I2C_READ RESULT:" in line), ""
+                            )
+                            value_match = re.search(r"VALUE=0x([0-9A-F]{1,2})$", read_line, re.IGNORECASE)
+                            value = int(value_match.group(1), 16) if value_match else None
+                            if read_line:
+                                identity_evidence.append(read_line)
+                            if read_completed and value is not None:
+                                candidate = match_i2c_identity(address, register, value)
+                                if candidate is not None:
+                                    matched_profile = candidate
+                                    i2c_tests.append(_test_result(
+                                        "{} chip identity at 0x{:02X}".format(candidate.display_name, address),
+                                        "I2C",
+                                        "pass",
+                                        read_line + " matched " + candidate.profile_id,
+                                        read_elapsed,
+                                        [float(value)],
+                                    ))
+                                    break
+
+                        if matched_profile is not None:
+                            external.append({
+                                "name": matched_profile.display_name,
+                                "interface": "I2C",
+                                "profile": matched_profile.profile_id,
+                                "status": "not_tested",
+                                "expected": "Device-specific functional checks beyond chip ID",
+                                "observed": (
+                                    "ACK at 0x{:02X}; identity register 0x{:02X} matched 0x{:02X}."
+                                    .format(address, matched_profile.identity_register,
+                                            next(value for value in matched_profile.expected_values
+                                                 if value == int(value_match.group(1), 16)))
+                                ),
+                                "measurements": {},
+                                "evidence": [
+                                    "Arduino Uno R3 I2C scanner reported ACK at this address."
+                                ] + identity_evidence,
+                                "notes": (
+                                    "Device model was identified by its documented ID register. "
+                                    "Its sensor/display/actuator functions were not yet tested."
+                                ),
+                            })
+                        else:
+                            external.append({
+                                "name": "Unidentified I2C peripheral at 0x{:02X}".format(address),
+                                "interface": "I2C",
+                                "profile": "",
+                                "status": "unknown",
+                                "expected": "Device-specific identity/health test",
+                                "observed": "Address 0x{:02X} acknowledged an I2C address probe.".format(address),
+                                "measurements": {},
+                                "evidence": [
+                                    "Arduino Uno R3 I2C scanner reported ACK at this address."
+                                ] + identity_evidence,
+                                "notes": (
+                                    "No known ID-register profile matched. Address ACK does not "
+                                    "identify the device or prove it is healthy."
+                                ),
+                            })
                     if not addresses and status == "pass":
                         i2c_tests[-1].details += " No peripherals ACKed; this is not by itself an MCU failure."
                 else:
@@ -516,6 +575,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--output", default="./results/arduino_uno_r3", help="Directory for TXT/HTML/JSON reports.")
     parser.add_argument("--interactive", action="store_true", help="Run GPIO, PWM, ADC, LED and SPI tests with jumper prompts.")
     parser.add_argument("--scan-i2c", action="store_true", help="Scan I2C addresses after explicit voltage/wiring confirmation.")
+    parser.add_argument("--identify-i2c", action="store_true", help="Also read documented ID registers for known supported sensors; implies --scan-i2c.")
     parser.add_argument("--ai-analysis", action="store_true", help="Add optional NVIDIA Nemotron analysis to reports.")
     parser.add_argument("--nemotron-model", default=None, help="Optional NVIDIA NIM model identifier.")
     parser.add_argument("--external-observations", help="JSON file with separately recorded peripheral evidence.")
@@ -541,7 +601,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             detection=detection,
             output_dir=Path(args.output),
             interactive=args.interactive,
-            scan_i2c=args.scan_i2c,
+            scan_i2c=args.scan_i2c or args.identify_i2c,
+            identify_i2c=args.identify_i2c,
             ai_analysis=args.ai_analysis,
             nemotron_model=args.nemotron_model,
             external_observations_path=(
