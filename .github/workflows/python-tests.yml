@@ -45,4 +45,4 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install arduino:avr
       - name: Compile Arduino Uno R3 diagnostic firmware
-        run: arduino-cli compile --fqbn arduino:avr:uno firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino
+        run: arduino-cli compile --fqbn arduino:avr:uno firmware/arduino_uno_r3
