@@ -74,6 +74,7 @@ def test_default_plan_is_preview_only_and_excludes_memory_writes():
 
     assert plan["plan_only"] is True
     assert plan["execution_started"] is False
+    assert plan["adapter"]["implementation_available"] is True
     assert tests["gpio_loopback"]["status"] == "requires_wiring"
     assert tests["pwm_output_check"]["pins"] == ["D3", "D5", "D6", "D9", "D10", "D11"]
     assert tests["memory_write_tests"]["status"] == "excluded_by_default"
@@ -94,3 +95,14 @@ def test_destructive_tests_are_only_listed_after_explicit_plan_opt_in():
 
 def test_no_ports_returns_an_empty_detection_list():
     assert detect_connected_boards([]) == []
+
+
+
+def test_profile_without_execution_adapter_is_not_claimed_as_runnable():
+    profile = get_board_profile("arduino_mega_2560_r3")
+    assert profile is not None
+
+    plan = build_diagnostic_plan(profile)
+
+    assert plan["adapter"]["implementation_available"] is False
+    assert plan["adapter"]["mode"] == "profile_and_plan_preview_only"
