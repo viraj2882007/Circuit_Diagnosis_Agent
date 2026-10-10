@@ -159,12 +159,21 @@ def detect_connected_boards(ports: Optional[Iterable[Any]] = None) -> List[Board
     return detections
 
 
-def _print_detections(detections: List[BoardDetection]) -> None:
-    if not detections:
-        print("No serial ports found.")
-        print("Connect a supported board by USB, or use the relevant debug-probe workflow.")
-        return
+def detect_connected_debug_probes() -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """List recognizable debug-probe USB devices without connecting to the target MCU.
 
+    A probe listing is not a target-MCU identification. Target identification needs
+    a probe-specific target-ID operation and appropriate target selection.
+    """
+    try:
+        from .probe.factory import ProbeFactory
+
+        return ProbeFactory().detect_probes(), None
+    except Exception as exc:
+        return [], "Debug-probe inventory unavailable: {}: {}".format(type(exc).__name__, exc)
+
+
+def _print_detections(detections: List[BoardDetection], debug_probes: List[Dict[str, Any]], probe_error: Optional[str] = None) -> None:
     print("Board discovery (read-only; no reset, firmware upload, or hardware tests performed)")
     print("=" * 78)
     for detection in detections:
@@ -199,11 +208,34 @@ def _print_detections(detections: List[BoardDetection]) -> None:
             )
         print("  {}".format(detection.description or detection.hwid or "No descriptor available"))
 
+    if not detections:
+        print("No USB serial ports found.")
+
+    print()
+    print("Debug probes (probe presence does not identify the target MCU):")
+    if debug_probes:
+        for probe in debug_probes:
+            print(
+                "- {type} {product} VID:PID={vid}:{pid} serial={serial} backend={backend}".format(
+                    type=probe.get("type", "debug probe"),
+                    product=probe.get("product") or "unknown product",
+                    vid=str(probe.get("vid") or "????").upper(),
+                    pid=str(probe.get("pid") or "????").upper(),
+                    serial=probe.get("serial") or "unknown",
+                    backend=probe.get("backend") or "unknown",
+                )
+            )
+        print("Target MCU identification still requires a supported target-ID adapter.")
+    elif probe_error:
+        print(probe_error)
+    else:
+        print("No supported debug probes detected.")
+
     print()
     print("Known profiles: {}".format(", ".join(
         profile.display_name for profile in BOARD_PROFILES.values()
     )))
-    print("A test plan can only be printed for an exact profile match, e.g. --plan COM9.")
+    print("A serial test plan can only be printed for an exact profile match, e.g. --plan COM9.")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -233,6 +265,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except Exception as exc:
         print("Board discovery failed: {}".format(exc), file=sys.stderr)
         return 2
+    debug_probes, probe_error = detect_connected_debug_probes()
 
     if args.plan:
         requested_port = args.plan.strip().lower()
@@ -275,10 +308,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.json:
-        print(json.dumps([item.to_dict() for item in detections], indent=2))
+        print(json.dumps({
+            "serial_board_detections": [item.to_dict() for item in detections],
+            "debug_probes": debug_probes,
+            "debug_probe_detection_error": probe_error,
+            "note": "Detected debug probes are not proof of target MCU identity or hardware health.",
+        }, indent=2))
     else:
-        _print_detections(detections)
-    return 0 if detections else 1
+        _print_detections(detections, debug_probes, probe_error)
+    return 0 if detections or debug_probes else 1
 
 
 if __name__ == "__main__":
