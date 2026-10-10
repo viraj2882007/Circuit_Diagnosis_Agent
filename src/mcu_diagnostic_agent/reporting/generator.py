@@ -115,7 +115,7 @@ def _write_text_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     try:
-        with open(temporary, "w", encoding="utf-8", newline="\\n") as stream:
+        with open(temporary, "w", encoding="utf-8", newline="\n") as stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
