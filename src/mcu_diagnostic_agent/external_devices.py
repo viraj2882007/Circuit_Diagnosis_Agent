@@ -26,7 +26,7 @@ I2C_IDENTITY_PROFILES: Tuple[I2CIdentityProfile, ...] = (
         display_name="Bosch BMP280 pressure sensor",
         addresses=(0x76, 0x77),
         identity_register=0xD0,
-        expected_values=(0x56, 0x57, 0x58),
+        expected_values=(0x58,),
         notes="Chip ID register 0xD0; accepted values cover documented BMP280 revisions.",
     ),
     I2CIdentityProfile(
