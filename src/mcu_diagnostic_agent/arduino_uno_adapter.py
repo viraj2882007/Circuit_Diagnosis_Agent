@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import serial
 
 from .ai_diagnosis import generate_ai_analysis
+from .avrdude_support import read_atmega328p_signature
 from .board_detection import BoardDetection, detect_connected_boards
 from .external_devices import match_i2c_identity, profiles_for_i2c_address
 from .peripheral_observations import load_external_observations
@@ -373,6 +374,9 @@ def run_diagnostic(
     ai_analysis: bool = False,
     nemotron_model: Optional[str] = None,
     external_observations_path: Optional[Path] = None,
+    check_signature: bool = True,
+    avrdude_executable: Optional[Path] = None,
+    avrdude_config: Optional[Path] = None,
     timeout_seconds: float = 5.0,
 ) -> DiagnosticReport:
     """Run the already-uploaded Uno diagnostic sketch and generate reports."""
@@ -390,6 +394,7 @@ def run_diagnostic(
         )
     ]
     firmware_tests: List[TestResultData] = []
+    chip_tests: List[TestResultData] = []
     led_tests: List[TestResultData] = []
     gpio_tests: List[TestResultData] = []
     pwm_tests: List[TestResultData] = []
@@ -397,6 +402,25 @@ def run_diagnostic(
     spi_tests: List[TestResultData] = []
     i2c_tests: List[TestResultData] = []
     external = load_external_observations(external_observations_path)
+
+    if check_signature:
+        signature_status, signature_details, signature_elapsed = read_atmega328p_signature(
+            detection.port,
+            executable=avrdude_executable,
+            config_file=avrdude_config,
+        )
+        chip_tests.append(_test_result(
+            "ATmega328P device signature",
+            "Chip identification",
+            signature_status,
+            signature_details,
+            signature_elapsed,
+        ))
+        if signature_status == "fail":
+            raise RuntimeError(
+                "MCU signature verification did not pass. No Uno sketch commands were sent. "
+                + signature_details
+            )
 
     try:
         with serial.Serial(detection.port, baudrate=115200, timeout=0.2, write_timeout=2.0) as ser:
@@ -529,6 +553,7 @@ def run_diagnostic(
     suites: List[SuiteResultData] = []
     for name, tests in (
         ("Host interface", host_tests),
+        ("Chip identification", chip_tests),
         ("Firmware handshake", firmware_tests),
         ("Onboard", led_tests),
         ("GPIO", gpio_tests),
@@ -580,6 +605,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--nemotron-model", default=None, help="Optional NVIDIA NIM model identifier.")
     parser.add_argument("--external-observations", help="JSON file with separately recorded peripheral evidence.")
     parser.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for each firmware command response.")
+    parser.add_argument("--skip-signature-check", action="store_true", help="Skip AVRDUDE MCU signature verification.")
+    parser.add_argument("--avrdude-path", help="Optional path to avrdude.exe/avrdude for chip signature verification.")
+    parser.add_argument("--avrdude-config", help="Optional path to avrdude.conf.")
     parser.add_argument("--yes-reset", action="store_true", help="Confirm the serial port may auto-reset the Uno when opened.")
     args = parser.parse_args(argv)
 
@@ -608,6 +636,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             external_observations_path=(
                 Path(args.external_observations) if args.external_observations else None
             ),
+            check_signature=not args.skip_signature_check,
+            avrdude_executable=Path(args.avrdude_path) if args.avrdude_path else None,
+            avrdude_config=Path(args.avrdude_config) if args.avrdude_config else None,
             timeout_seconds=args.timeout,
         )
     except (RuntimeError, ValueError, OSError) as exc:
