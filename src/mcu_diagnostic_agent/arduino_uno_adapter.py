@@ -421,6 +421,13 @@ def run_diagnostic(
                 "MCU signature verification did not pass. No Uno sketch commands were sent. "
                 + signature_details
             )
+    else:
+        chip_tests.append(_test_result(
+            "ATmega328P device signature",
+            "Chip identification",
+            "skip",
+            "Skipped by the user; MCU silicon signature was not independently verified.",
+        ))
 
     try:
         with serial.Serial(detection.port, baudrate=115200, timeout=0.2, write_timeout=2.0) as ser:
