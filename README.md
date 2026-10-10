@@ -1,6 +1,6 @@
 # MCU Diagnostic Agent
 
-A comprehensive diagnostic tool for MCU-based projects that automatically tests all peripherals and identifies faulty hardware.
+An extensible MCU diagnostic agent with board-aware discovery, capability-based test planning, structured reports, and optional NVIDIA Nemotron analysis. Actual coverage depends on the selected board profile, diagnostic firmware/adapters, wiring, and available measurement equipment; the tool must not mark untested peripherals as passing.
 
 ## Supported Platforms
 
@@ -13,7 +13,8 @@ A comprehensive diagnostic tool for MCU-based projects that automatically tests 
 
 ## Features
 
-- **Automated peripheral testing**: GPIO, ADC, DAC, UART, SPI, I2C, Timers, PWM, Flash, RAM
+- **Board-aware discovery and planning**: matches known USB serial identities to board profiles and previews board-specific checks
+- **Peripheral diagnostics**: GPIO, ADC, UART, SPI, I2C, timers/PWM, memory and external-module checks when the correct board adapter and test conditions are available
 - **Multi-probe support**: Works with ST-Link, J-Link, CMSIS-DAP, ESP-Prog, Black Magic Probe
 - **Zephyr-based test firmware**: Portable, professional RTOS-based diagnostics
 - **Comprehensive reporting**: HTML, JSON, and text reports with pass/fail analysis
@@ -68,7 +69,24 @@ python -m mcu_diagnostic_agent stm32 --firmware ./build/zephyr/zephyr.bin
 
 # Verbose output
 python -m mcu_diagnostic_agent stm32 -v
+
+# Read-only serial-board discovery (does not reset or flash devices)
+python -m mcu_diagnostic_agent.board_detection
+
+# Preview a board-specific plan for an exact matched serial board
+python -m mcu_diagnostic_agent.board_detection --plan COM9
+
+# Print the plan as JSON for automation/integration
+python -m mcu_diagnostic_agent.board_detection --plan COM9 --json
 ```
+
+### Board-aware discovery and safety limits
+
+The initial USB serial profile registry includes Arduino Uno R3, Mega 2560 R3, Leonardo, and Micro identities. Discovery uses exact configured USB VID/PID matches for automatic profile selection. A product/description hint is shown only as a low-confidence candidate; it does not silently choose a test plan. Boards using generic CH340/CP210x bridges, SWD-only targets, bootloader/DFU modes, or unregistered identities may require an explicit selection or another discovery adapter.
+
+The discovery command is **read-only**. Its plan preview does not run tests, change pins, reset a board, or flash firmware. A planned test marked as requiring wiring, a firmware adapter, a device profile, or a measurement instrument is not yet an executed test. Actual PASS/FAIL results must come from recorded measurements. Peripheral absence (for example, no I2C ACK when no module is attached) is not by itself proof of a fault. SPI/UART devices and arbitrary external sensors cannot all be identified through one universal scan.
+
+Memory write/flash tests are excluded from the default plan because they can change stored data or overwrite firmware. The project does not yet implement automatic backup and restoration of arbitrary application firmware.
 
 ### Test Suites
 
