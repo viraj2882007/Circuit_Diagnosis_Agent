@@ -331,12 +331,25 @@ def build_diagnostic_plan(profile: BoardProfile, include_destructive: bool = Fal
             "prerequisites": ["Explicit opt-in and a validated board-specific recovery strategy"],
         })
 
+    adapter_available = profile.board_id == "arduino_uno_r3"
     return {
         "board": {
             "board_id": profile.board_id,
             "display_name": profile.display_name,
             "mcu_family": profile.mcu_family,
             "mcu_part": profile.mcu_part,
+        },
+        "adapter": {
+            "id": "arduino_uno_r3_serial_v2" if adapter_available else None,
+            "implementation_available": adapter_available,
+            "mode": "manual_firmware_upload_then_host_control" if adapter_available else "profile_and_plan_preview_only",
+            "note": (
+                "A dedicated Uno R3 sketch and serial host adapter are implemented; "
+                "the sketch must be uploaded manually before hardware tests."
+                if adapter_available
+                else "This board has a capability profile, but a board-specific execution adapter "
+                     "and matching diagnostic firmware are not implemented yet."
+            ),
         },
         "plan_only": True,
         "execution_started": False,
