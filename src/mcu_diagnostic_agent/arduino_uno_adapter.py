@@ -489,6 +489,7 @@ def run_diagnostic(
         suites=suites,
         external_peripherals=external,
         duration=time.time() - start_time,
+        firmware_version=2,
     )
 
     if ai_analysis:
