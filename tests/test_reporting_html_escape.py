@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from mcu_diagnostic_agent.reporting.generator import (
@@ -58,5 +59,9 @@ def test_report_files_are_written_as_utf8_and_include_unicode(tmp_path: Path):
     assert text_path.is_file()
     assert Path(report.html_path).is_file()
     assert Path(report.json_path).is_file()
+    payload = json.loads(Path(report.json_path).read_text(encoding="utf-8"))
+    assert payload["json_path"] == report.json_path
+    assert payload["html_path"] == report.html_path
+    assert payload["report_path"] == report.report_path
     assert "ATmega328P — Uno R3" in Path(report.html_path).read_text(encoding="utf-8")
     assert "ATmega328P — Uno R3" in text_path.read_text(encoding="utf-8")
