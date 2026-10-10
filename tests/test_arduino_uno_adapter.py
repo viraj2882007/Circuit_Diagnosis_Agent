@@ -6,6 +6,7 @@ from mcu_diagnostic_agent.arduino_uno_adapter import (
     _make_suite,
     _test_result,
     parse_adc_measurement,
+    parse_firmware_duration,
     parse_i2c_addresses,
     parse_pair_results,
 )
@@ -67,6 +68,12 @@ def test_parse_adc_measurement():
     assert parse_adc_measurement("ADC A0 expected LOW; average analogRead=3 / 1023 => PASS") == 3
     assert parse_adc_measurement("ADC A1 expected HIGH; average analogRead=1022 / 1023 => PASS") == 1022
     assert parse_adc_measurement("ERROR: Analog pin must be A0 through A5.") is None
+
+
+def test_parse_firmware_duration_uses_device_measured_value():
+    assert parse_firmware_duration("D2 output -> D3 input: duration_ms=7 => PASS") == 7.0
+    assert parse_firmware_duration("PWM RESULT: PASS; duration_ms=42") == 42.0
+    assert parse_firmware_duration("ADC A0 expected LOW; no timing available") is None
 
 
 def test_signature_failure_generates_report_and_skips_hardware_commands(tmp_path, monkeypatch):
