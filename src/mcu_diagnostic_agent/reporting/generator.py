@@ -243,12 +243,14 @@ class ReportGenerator:
             for test in suite.tests:
                 color = status_colors.get(test.status, '#6c757d')
                 meas_str = ', '.join(f'{m:.2f}' for m in test.measurements) if test.measurements else ''
+                duration_text = format_duration(test.duration_ms, "ms")
 
                 html += f"""
         <div class="test">
             <div>
                 <div class="test-name">{html_lib.escape(str(test.name))}</div>
                 <div class="test-details">{html_lib.escape(str(test.details))}</div>
+                <div class="measurements">Duration: {html_lib.escape(duration_text)}</div>
                 {f'<div class="measurements">Measurements: {html_lib.escape(meas_str)}</div>' if meas_str else ''}
             </div>
             <div class="test-status" style="background: {color};">{html_lib.escape(str(test.status).upper())}</div>
@@ -317,6 +319,7 @@ class ReportGenerator:
                 for test in suite.tests:
                     status_str = test.status.upper()
                     f.write(f"  [{status_str}] {test.name}")
+                    f.write(" (duration: {})".format(format_duration(test.duration_ms, "ms")))
                     if test.details:
                         f.write(f" - {test.details}")
                     if test.measurements:
