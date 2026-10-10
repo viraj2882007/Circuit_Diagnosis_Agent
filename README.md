@@ -88,6 +88,29 @@ The discovery command is **read-only**. Its plan preview does not run tests, cha
 
 Memory write/flash tests are excluded from the default plan because they can change stored data or overwrite firmware. The project does not yet implement automatic backup and restoration of arbitrary application firmware.
 
+### Run the Arduino Uno R3 diagnostic adapter
+
+The board-specific sketch is maintained at `firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino`. Upload it manually using Arduino IDE with **Arduino Uno** selected. The host runner will not upload firmware and will refuse to run Uno-specific commands unless the serial firmware reports board ID `ARDUINO_UNO_R3` and version `2`.
+
+Close Arduino IDE's Serial Monitor before running the host adapter. Opening COM ports commonly auto-resets an Uno; the runner asks for confirmation unless `--yes-reset` is supplied.
+
+```powershell
+# Passive board identification and test-plan preview
+mcu-board
+
+# Verify board identity and the manually uploaded diagnostic firmware
+mcu-uno-test --port COM9
+
+# Run GPIO, PWM, ADC, onboard LED and SPI loopback checks.
+# This mode prompts for each jumper/wiring change and records skipped checks as skipped.
+mcu-uno-test --port COM9 --interactive
+
+# Optional I2C address scan and AI analysis; verify 5V/3.3V compatibility and pull-ups first.
+mcu-uno-test --port COM9 --scan-i2c --ai-analysis
+```
+
+The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK but does not infer device identity or health; address responses are stored as unknown observations until a device-specific profile check is performed. For safety, the scanner asks for confirmation before probing the bus.
+
 ### Test Suites
 
 | Suite | Tests | Description |
