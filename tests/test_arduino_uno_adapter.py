@@ -105,3 +105,34 @@ def test_signature_failure_generates_report_and_skips_hardware_commands(tmp_path
     assert report.json_path
     assert report.html_path
     assert report.report_path
+
+
+def test_unknown_usb_bridge_requires_explicit_board_confirmation(monkeypatch):
+    from mcu_diagnostic_agent import arduino_uno_adapter as adapter
+    from mcu_diagnostic_agent.board_detection import BoardDetection
+
+    unknown = BoardDetection(
+        port="COM7",
+        description="USB-SERIAL CH340",
+        hwid="USB VID:PID=1A86:7523",
+        vid=0x1A86,
+        pid=0x7523,
+        profile_id=None,
+        candidate_profile_id=None,
+        confidence="unknown",
+        match_method="unrecognized",
+        evidence=["Unmatched USB VID/PID 1A86:7523"],
+    )
+    monkeypatch.setattr(adapter, "detect_connected_boards", lambda: [unknown])
+
+    try:
+        adapter._choose_port("COM7")
+    except RuntimeError as exc:
+        assert "--confirm-board arduino_uno_r3" in str(exc)
+    else:
+        raise AssertionError("Unknown USB bridge must not be auto-selected")
+
+    confirmed = adapter._choose_port("COM7", "arduino_uno_r3")
+    assert confirmed.profile_id == "arduino_uno_r3"
+    assert confirmed.match_method == "explicit_user_confirmation"
+    assert confirmed.confidence == "user_confirmed"
