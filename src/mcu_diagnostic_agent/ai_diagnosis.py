@@ -85,6 +85,7 @@ def _compact_evidence(report: Mapping[str, Any]) -> dict[str, Any]:
         },
         "internal_test_suites": suites_out,
         "external_peripherals": report.get("external_peripherals", []) or [],
+        "untested_peripherals": report.get("untested_peripherals", []) or [],
     }
 
 
@@ -164,7 +165,7 @@ def _all_pass_summary(report: Mapping[str, Any]) -> str | None:
         "- No repair steps or replacement recommendation are warranted unless a later test identifies a fault.",
         "- This all-pass summary is deterministic; NVIDIA Nemotron was not called for this run.",
     ])
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def generate_ai_analysis(
