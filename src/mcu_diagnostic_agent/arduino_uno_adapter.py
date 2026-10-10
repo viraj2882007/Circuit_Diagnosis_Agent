@@ -384,6 +384,22 @@ def _run_manual_tests(
             "User stopped remaining manual tests." if action == "stop" else "User skipped; no measurement made.",
         )
 
+def _record_unexecuted_manual_groups(
+    gpio_tests: List[TestResultData],
+    pwm_tests: List[TestResultData],
+    adc_tests: List[TestResultData],
+    spi_tests: List[TestResultData],
+    led_tests: List[TestResultData],
+    reason: str,
+) -> None:
+    """Record unfinished manual groups so missing coverage is visible in reports."""
+    _add_skipped(led_tests, "Remaining onboard LED check", "Onboard", reason)
+    _add_skipped(gpio_tests, "Remaining GPIO loopback checks", "GPIO", reason)
+    _add_skipped(pwm_tests, "Remaining PWM output checks", "PWM", reason)
+    _add_skipped(adc_tests, "Remaining ADC input checks", "ADC", reason)
+    _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", reason)
+
+
 def run_diagnostic(
     detection: BoardDetection,
     output_dir: Path,
@@ -566,11 +582,44 @@ def run_diagnostic(
                         ser, gpio_tests, pwm_tests, adc_tests, spi_tests, led_tests, timeout_seconds
                     )
         except serial.SerialException as exc:
-            raise RuntimeError(
-                "Could not open/use {}. Close Arduino Serial Monitor and other serial applications. ({})".format(
-                    detection.port, exc
+            detail = (
+                "Could not open/use {}. Close Arduino Serial Monitor and other serial applications. ({})"
+                .format(detection.port, exc)
+            )
+            host_tests.append(_test_result(
+                "Serial connection to diagnostic firmware",
+                "Host interface",
+                "fail",
+                detail,
+            ))
+            if not firmware_tests:
+                _add_skipped(
+                    firmware_tests,
+                    "Diagnostic firmware identity",
+                    "Firmware handshake",
+                    "Skipped because the diagnostic serial connection could not be used.",
                 )
-            ) from None
+            if scan_i2c and not i2c_tests:
+                _add_skipped(i2c_tests, "I2C address scan", "I2C", detail)
+            if interactive:
+                _record_unexecuted_manual_groups(
+                    gpio_tests, pwm_tests, adc_tests, spi_tests, led_tests, detail
+                )
+        except RuntimeError as exc:
+            detail = str(exc)
+            firmware_tests.append(_test_result(
+                "Diagnostic firmware handshake",
+                "Firmware handshake",
+                "fail",
+                detail,
+            ))
+            if scan_i2c and not i2c_tests:
+                _add_skipped(i2c_tests, "I2C address scan", "I2C", detail)
+            if interactive:
+                _record_unexecuted_manual_groups(
+                    gpio_tests, pwm_tests, adc_tests, spi_tests, led_tests,
+                    "Skipped because the diagnostic firmware handshake failed.",
+                )
     else:
         reason = (
             "Skipped because the AVRDUDE MCU signature check did not match the expected "
