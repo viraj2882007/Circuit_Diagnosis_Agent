@@ -105,6 +105,46 @@ def _make_suite(name: str, tests: List[TestResultData]) -> SuiteResultData:
     )
 
 
+def _derive_untested_features(
+    suites: List[SuiteResultData],
+    scan_i2c: bool,
+    identify_i2c: bool,
+) -> List[str]:
+    """List features not actually verified by this run."""
+    present = {suite.name.lower() for suite in suites if suite.tests}
+    untested: List[str] = [
+        "D0/RX and D1/TX were reserved for USB serial and not tested as general GPIO.",
+        "GPIO drive strength, leakage, short-circuit behavior, and loaded-output performance were not measured.",
+        "External interrupts and timer/counter accuracy were not tested.",
+        "Power rails, current draw, regulator performance, clock accuracy, watchdog and reset-circuit behavior were not measured.",
+        "EEPROM/flash write-integrity tests were intentionally omitted to avoid changing user data or firmware.",
+        "External peripherals on UART or GPIO and all device-specific actuator/sensor behavior remain untested unless explicitly listed in results.",
+    ]
+    if "gpio" not in present:
+        untested.append("Digital GPIO loopback on D2-D13 was not run.")
+    if "adc" not in present:
+        untested.append("ADC input checks on A0-A5 were not run.")
+    else:
+        untested.append("ADC linearity, reference-voltage accuracy and conversion timing were not calibrated.")
+    if "pwm" not in present:
+        untested.append("PWM output checks on D3, D5, D6, D9, D10 and D11 were not run.")
+    else:
+        untested.append("PWM frequency and duty cycle were not measured with a logic analyzer or oscilloscope.")
+    if not scan_i2c:
+        untested.append("I2C on A4/A5 was not scanned; connected I2C peripherals are unknown.")
+    elif not identify_i2c:
+        untested.append("I2C addresses may have ACKed, but known-device identity registers and device functions were not tested.")
+    else:
+        untested.append("Known I2C chip IDs may be identified; full sensor/display/module operation still requires device-specific tests.")
+    if "spi" not in present:
+        untested.append("SPI MOSI/MISO loopback on D11/D12 was not run.")
+    else:
+        untested.append("SPI external devices and full protocols were not tested; only the documented loopback was checked.")
+    if "onboard" not in present:
+        untested.append("The onboard L LED was not visually verified.")
+    return untested
+
+
 def _choose_port(
     requested_port: Optional[str],
     confirmed_board_id: Optional[str] = None,
@@ -680,6 +720,7 @@ def run_diagnostic(
             detection.hwid
             or "USB:{:04X}:{:04X}@{}".format(detection.vid or 0, detection.pid or 0, detection.port)
         ),
+        untested_peripherals=_derive_untested_features(suites, scan_i2c, identify_i2c),
     )
 
     if ai_analysis:
