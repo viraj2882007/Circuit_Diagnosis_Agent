@@ -13,6 +13,30 @@ from mcu_diagnostic_agent.arduino_uno_adapter import (
 from mcu_diagnostic_agent.board_detection import detect_connected_boards
 
 
+def test_startup_reader_drains_startup_before_handshake():
+    class FakeSerial:
+        def __init__(self):
+            self.lines = [
+                b"UNO R3 DIAGNOSTIC SKETCH READY\\r\\n",
+                b"BOARD:ARDUINO_UNO_R3\\r\\n",
+                b"FIRMWARE_VERSION:3\\r\\n",
+                b"INFO RESULT: PASS\\r\\n",
+                b"No external wires should be connected until a test asks for one.\\r\\n",
+                b"LED test sequence complete. Did the onboard L LED blink 3 times?\\r\\n",
+                b"NEXT COMMAND RESPONSE\\r\\n",
+            ]
+
+        def readline(self):
+            return self.lines.pop(0) if self.lines else b""
+
+    serial_port = FakeSerial()
+    lines = arduino_uno_adapter._read_startup(serial_port, timeout_seconds=1.0)
+
+    assert any("UNO R3 DIAGNOSTIC SKETCH READY" in line for line in lines)
+    assert any("LED test sequence complete." in line for line in lines)
+    assert serial_port.lines == [b"NEXT COMMAND RESPONSE\\r\\n"]
+
+
 def test_parse_pair_results_extracts_both_directions():
     lines = [
         "Testing jumper connection D2 <-> D3",
