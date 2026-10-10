@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from mcu_diagnostic_agent import arduino_uno_adapter
@@ -136,3 +137,43 @@ def test_unknown_usb_bridge_requires_explicit_board_confirmation(monkeypatch):
     assert confirmed.profile_id == "arduino_uno_r3"
     assert confirmed.match_method == "explicit_user_confirmation"
     assert confirmed.confidence == "user_confirmed"
+
+
+
+def test_serial_port_error_generates_failure_report_and_marks_tests_skipped(tmp_path, monkeypatch):
+    port = SimpleNamespace(
+        device="COM9",
+        description="Arduino Uno (COM9)",
+        hwid="USB VID:PID=2341:0043",
+        vid=0x2341,
+        pid=0x0043,
+        product="Arduino Uno",
+        manufacturer="Arduino",
+        serial_number="TEST",
+    )
+    detection = detect_connected_boards([port])[0]
+
+    monkeypatch.setattr(
+        arduino_uno_adapter,
+        "read_atmega328p_signature",
+        lambda *args, **kwargs: ("skip", "AVRDUDE not found", 0.0),
+    )
+
+    def raise_port_busy(*args, **kwargs):
+        raise arduino_uno_adapter.serial.SerialException("port busy")
+
+    monkeypatch.setattr(arduino_uno_adapter.serial, "Serial", raise_port_busy)
+
+    report = arduino_uno_adapter.run_diagnostic(
+        detection=detection,
+        output_dir=tmp_path,
+        interactive=True,
+        check_signature=True,
+    )
+
+    assert report.failed == 1
+    assert report.skipped >= 5
+    assert "Serial connection to diagnostic firmware" in {
+        test.name for suite in report.suites for test in suite.tests
+    }
+    assert Path(report.json_path).is_file()
