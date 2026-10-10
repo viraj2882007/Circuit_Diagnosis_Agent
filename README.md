@@ -90,7 +90,7 @@ Memory write/flash tests are excluded from the default plan because they can cha
 
 ### Run the Arduino Uno R3 diagnostic adapter
 
-The board-specific sketch is maintained at `firmware/arduino_uno_r3/arduino_uno_r3.ino`. Upload it manually using Arduino IDE with **Arduino Uno** selected. The host runner will not upload firmware and will refuse to run Uno-specific commands unless the serial firmware reports board ID `ARDUINO_UNO_R3` and version `2`. When AVRDUDE is available, it first reads the MCU signature in no-write mode and requires the expected ATmega328P signature `1E 95 0F`; if AVRDUDE cannot be found, that check is recorded as skipped.
+The board-specific sketch is maintained at `firmware/arduino_uno_r3/arduino_uno_r3.ino`. Upload it manually using Arduino IDE with **Arduino Uno** selected. The host runner will not upload firmware and will refuse to run Uno-specific commands unless the serial firmware reports board ID `ARDUINO_UNO_R3` and version `3`. When AVRDUDE is available, it first reads the MCU signature in no-write mode and requires the expected ATmega328P signature `1E 95 0F`; if AVRDUDE cannot be found, that check is recorded as skipped.
 
 Close Arduino IDE's Serial Monitor before running the host adapter. Opening COM ports commonly auto-resets an Uno; the runner asks for confirmation unless `--yes-reset` is supplied.
 
