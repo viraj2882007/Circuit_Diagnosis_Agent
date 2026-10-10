@@ -50,6 +50,12 @@ def parse_adc_measurement(line: str) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
+def parse_firmware_duration(line: str) -> Optional[float]:
+    """Extract the duration measured by the target firmware, not a host-side estimate."""
+    match = re.search(r"duration_ms=(\d+(?:\.\d+)?)", line, re.IGNORECASE)
+    return float(match.group(1)) if match else None
+
+
 def parse_i2c_addresses(lines: Sequence[str]) -> List[int]:
     """Return I2C addresses reported by the scan command, without inferring device identity."""
     addresses: List[int] = []
@@ -293,7 +299,7 @@ def _run_manual_tests(
             for direction_name, status, evidence_line in direction_results:
                 gpio_tests.append(_test_result(
                     direction_name, "GPIO", status, evidence_line,
-                    elapsed / max(len(direction_results), 1),
+                    parse_firmware_duration(evidence_line),
                 ))
 
     for pwm_pin in (3, 5, 6, 9, 10, 11):
@@ -323,7 +329,7 @@ def _run_manual_tests(
         pwm_tests.append(_test_result(
             name, "PWM", status,
             result_line or "No PWM result received. Output: {}".format(" | ".join(lines)),
-            elapsed,
+            parse_firmware_duration(result_line),
         ))
 
     for analog_index in range(6):
@@ -362,7 +368,7 @@ def _run_manual_tests(
             adc_tests.append(_test_result(
                 name, "ADC", status,
                 result_line or "No ADC result received. Output: {}".format(" | ".join(lines)),
-                elapsed, measurements,
+                parse_firmware_duration(result_line), measurements,
             ))
 
     if stop:
