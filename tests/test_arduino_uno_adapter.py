@@ -1,4 +1,14 @@
-from types import SimpleNamespace\n\nfrom mcu_diagnostic_agent import arduino_uno_adapter\nfrom mcu_diagnostic_agent.arduino_uno_adapter import (\n    _make_suite,\n    _test_result,\n    parse_adc_measurement,\n    parse_i2c_addresses,\n    parse_pair_results,\n)\nfrom mcu_diagnostic_agent.board_detection import detect_connected_boards
+from types import SimpleNamespace
+
+from mcu_diagnostic_agent import arduino_uno_adapter
+from mcu_diagnostic_agent.arduino_uno_adapter import (
+    _make_suite,
+    _test_result,
+    parse_adc_measurement,
+    parse_i2c_addresses,
+    parse_pair_results,
+)
+from mcu_diagnostic_agent.board_detection import detect_connected_boards
 
 
 def test_parse_pair_results_extracts_both_directions():
