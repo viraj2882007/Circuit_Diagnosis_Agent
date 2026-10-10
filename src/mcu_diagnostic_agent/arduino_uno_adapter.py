@@ -1,0 +1,573 @@
+"""Host runner for the board-specific Arduino Uno R3 diagnostic sketch.
+
+This runner never uploads firmware. The matching sketch must be uploaded manually
+from firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino before running pin tests.
+"""
+
+import argparse
+import asdict
+import re
+import sys
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+import serial
+
+from .ai_diagnosis import generate_ai_analysis
+from .board_detection import BoardDetection, detect_connected_boards
+from .peripheral_observations import load_external_observations
+from .reporting.generator import (
+    DiagnosticReport,
+    ReportGenerator,
+    SuiteResultData,
+    TestResultData,
+)
+
+_READY_MARKER = "UNO R3 DIAGNOSTIC SKETCH READY"
+_INFO_MARKER = "INFO RESULT: PASS"
+
+
+def parse_pair_results(lines: Sequence[str]) -> List[Tuple[str, str, str]]:
+    """Parse direction-level results emitted by the Uno diagnostic sketch."""
+    parsed: List[Tuple[str, str, str]] = []
+    pattern = re.compile(
+        r"^(D\d+ output -> D\d+ input):.*=> (PASS|FAIL)$",
+        re.IGNORECASE,
+    )
+    for line in lines:
+        match = pattern.search(line.strip())
+        if match:
+            parsed.append((match.group(1), match.group(2).lower(), line.strip()))
+    return parsed
+
+
+def parse_i2c_addresses(lines: Sequence[str]) -> List[int]:
+    """Return I2C addresses reported by the scan command, without inferring device identity."""
+    addresses: List[int] = []
+    pattern = re.compile(r"^I2C_ADDR:0x([0-9A-F]{1,2})$", re.IGNORECASE)
+    for line in lines:
+        match = pattern.match(line.strip())
+        if match:
+            address = int(match.group(1), 16)
+            if address not in addresses:
+                addresses.append(address)
+    return addresses
+
+
+def _test_result(
+    name: str,
+    suite: str,
+    status: str,
+    details: str,
+    duration_ms: float = 0.0,
+    measurements: Optional[List[float]] = None,
+) -> TestResultData:
+    return TestResultData(
+        name=name,
+        suite=suite,
+        status=status,
+        duration_ms=duration_ms,
+        details=details,
+        measurements=measurements or [],
+        timestamp=time.time(),
+    )
+
+
+def _make_suite(name: str, tests: List[TestResultData]) -> SuiteResultData:
+    return SuiteResultData(
+        name=name,
+        tests=tests,
+        passed=sum(test.status == "pass" for test in tests),
+        failed=sum(test.status in {"fail", "error"} for test in tests),
+        skipped=sum(test.status in {"skip", "skipped"} for test in tests),
+        duration_ms=sum(test.duration_ms for test in tests),
+    )
+
+
+def _choose_port(requested_port: Optional[str]) -> BoardDetection:
+    detections = detect_connected_boards()
+    exact_matches = [item for item in detections if item.profile_id == "arduino_uno_r3"]
+    if requested_port:
+        found = next(
+            (item for item in detections if item.port.lower() == requested_port.lower()),
+            None,
+        )
+        if found is None:
+            raise RuntimeError("Serial port {} was not found.".format(requested_port))
+        if found.profile_id != "arduino_uno_r3":
+            raise RuntimeError(
+                "Port {} does not have an exact Arduino Uno R3 USB profile match. "
+                "Refusing to send Uno-specific commands.".format(requested_port)
+            )
+        return found
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if not exact_matches:
+        raise RuntimeError(
+            "No exact Arduino Uno R3 USB identity detected. Connect a supported Uno R3 "
+            "or explicitly confirm/add a profile for a clone/unknown USB bridge."
+        )
+    raise RuntimeError(
+        "More than one Uno R3 profile was detected; specify one with --port."
+    )
+
+
+def _read_startup(ser: serial.Serial, timeout_seconds: float = 8.0) -> List[str]:
+    """Wait for the expected firmware banner after opening the serial port resets the Uno."""
+    deadline = time.monotonic() + timeout_seconds
+    lines: List[str] = []
+    while time.monotonic() < deadline:
+        raw = ser.readline()
+        if not raw:
+            continue
+        line = raw.decode("utf-8", errors="replace").strip()
+        if line:
+            lines.append(line)
+        if _READY_MARKER in line:
+            return lines
+    return lines
+
+
+def _send_command(
+    ser: serial.Serial,
+    command: str,
+    terminal_markers: Sequence[str],
+    timeout_seconds: float = 5.0,
+) -> Tuple[List[str], float, bool]:
+    """Send one newline-terminated command and read through a terminal marker."""
+    ser.reset_input_buffer()
+    started = time.monotonic()
+    ser.write((command + "\n").encode("ascii"))
+    ser.flush()
+    deadline = time.monotonic() + timeout_seconds
+    lines: List[str] = []
+    while time.monotonic() < deadline:
+        raw = ser.readline()
+        if not raw:
+            continue
+        line = raw.decode("utf-8", errors="replace").strip()
+        if line:
+            lines.append(line)
+            if any(marker in line for marker in terminal_markers):
+                return lines, (time.monotonic() - started) * 1000.0, True
+    return lines, (time.monotonic() - started) * 1000.0, False
+
+
+def _prompt_run(prompt: str) -> str:
+    answer = input("{} [R=run, S=skip, Q=stop remaining manual tests]: ".format(prompt))
+    normalized = answer.strip().lower()
+    if normalized in {"r", "run", "ready", "y", "yes"}:
+        return "run"
+    if normalized in {"q", "quit", "stop"}:
+        return "stop"
+    return "skip"
+
+
+def _add_skipped(test_results: List[TestResultData], name: str, suite: str, reason: str) -> None:
+    test_results.append(_test_result(name, suite, "skip", reason))
+
+
+def _run_manual_tests(
+    ser: serial.Serial,
+    gpio_tests: List[TestResultData],
+    pwm_tests: List[TestResultData],
+    adc_tests: List[TestResultData],
+    spi_tests: List[TestResultData],
+    led_tests: List[TestResultData],
+    timeout_seconds: float,
+) -> None:
+    print()
+    print("MANUAL HARDWARE TESTS")
+    print("Disconnect shields/peripherals first. Only connect the jumper requested for each test.")
+    ready = input("Type READY when all external wiring is removed and you can move one jumper safely: ")
+    if ready.strip().lower() != "ready":
+        _add_skipped(gpio_tests, "GPIO loopback series", "GPIO", "User did not confirm safe wiring.")
+        _add_skipped(pwm_tests, "PWM output series", "PWM", "User did not confirm safe wiring.")
+        _add_skipped(adc_tests, "ADC input series", "ADC", "User did not confirm safe wiring.")
+        _add_skipped(spi_tests, "SPI loopback", "SPI", "User did not confirm safe wiring.")
+        _add_skipped(led_tests, "Onboard LED visual check", "Onboard", "User did not confirm safe wiring.")
+        return
+
+    action = _prompt_run("Run onboard LED blink test; observe the L LED")
+    if action == "run":
+        lines, elapsed, completed = _send_command(
+            ser, "LED", ("LED test sequence complete",), timeout_seconds
+        )
+        observed = input("Did the onboard L LED blink three times? [y/n]: ").strip().lower()
+        status = "pass" if completed and observed in {"y", "yes"} else "fail"
+        if observed not in {"y", "yes", "n", "no"}:
+            status = "skip"
+        led_tests.append(_test_result(
+            "Onboard LED blink",
+            "Onboard",
+            status,
+            " | ".join(lines) if lines else "No LED result received.",
+            elapsed,
+        ))
+    else:
+        _add_skipped(led_tests, "Onboard LED blink", "Onboard", "User skipped visual confirmation.")
+    if action == "stop":
+        return
+
+    pairs = [(2, pin) for pin in range(3, 14)] + [(3, 4)]
+    stop = False
+    for source, sink in pairs:
+        name = "GPIO jumper pair D{}-D{}".format(source, sink)
+        action = _prompt_run(
+            "Connect exactly one jumper D{} <-> D{}; run {}".format(
+                source, sink, "PAIR {} {}".format(source, sink)
+            )
+        )
+        if action == "stop":
+            stop = True
+        if action != "run":
+            _add_skipped(gpio_tests, name, "GPIO", "User skipped or stopped manual pin tests.")
+            if stop:
+                break
+            continue
+        lines, elapsed, completed = _send_command(
+            ser,
+            "PAIR {} {}".format(source, sink),
+            ("PAIR RESULT:",),
+            timeout_seconds,
+        )
+        direction_results = parse_pair_results(lines)
+        if not completed or not direction_results:
+            gpio_tests.append(_test_result(
+                name, "GPIO", "fail",
+                "No parseable PAIR result. Output: {}".format(" | ".join(lines)),
+                elapsed,
+            ))
+        else:
+            for direction_name, status, evidence_line in direction_results:
+                gpio_tests.append(_test_result(
+                    direction_name,
+                    "GPIO",
+                    status,
+                    evidence_line,
+                    elapsed / max(len(direction_results), 1),
+                ))
+        if stop:
+            break
+
+    if stop:
+        for pin in (3, 5, 6, 9, 10, 11):
+            _add_skipped(pwm_tests, "PWM output D{}".format(pin), "PWM", "Manual tests stopped by user.")
+        for pin in range(6):
+            for level in ("LOW", "HIGH"):
+                _add_skipped(adc_tests, "ADC A{} {}".format(pin, level), "ADC", "Manual tests stopped by user.")
+        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "Manual tests stopped by user.")
+        return
+
+    for pwm_pin in (3, 5, 6, 9, 10, 11):
+        action = _prompt_run(
+            "Connect jumper D{} (PWM output) <-> D2 (input); run PWM {} 2".format(
+                pwm_pin, pwm_pin
+            )
+        )
+        if action == "stop":
+            stop = True
+        if action != "run":
+            _add_skipped(pwm_tests, "PWM output D{}".format(pwm_pin), "PWM", "User skipped PWM check.")
+            if stop:
+                break
+            continue
+        lines, elapsed, completed = _send_command(
+            ser, "PWM {} 2".format(pwm_pin), ("PWM RESULT:",), timeout_seconds
+        )
+        result_line = next((line for line in lines if "PWM RESULT:" in line), "")
+        status = "pass" if completed and "PWM RESULT: PASS" in result_line else "fail"
+        pwm_tests.append(_test_result(
+            "PWM output D{}".format(pwm_pin),
+            "PWM",
+            status,
+            result_line or "No PWM result received. Output: {}".format(" | ".join(lines)),
+            elapsed,
+        ))
+        if stop:
+            break
+
+    if stop:
+        for pin in range(6):
+            for level in ("LOW", "HIGH"):
+                _add_skipped(adc_tests, "ADC A{} {}".format(pin, level), "ADC", "Manual tests stopped by user.")
+        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "Manual tests stopped by user.")
+        return
+
+    for analog_index in range(6):
+        for level, rail in (("LOW", "GND"), ("HIGH", "5V")):
+            action = _prompt_run(
+                "Connect A{} to {} only (never bridge 5V to GND); run ADC A{} {}".format(
+                    analog_index, rail, analog_index, level
+                )
+            )
+            if action == "stop":
+                stop = True
+            if action != "run":
+                _add_skipped(
+                    adc_tests,
+                    "ADC A{} {}".format(analog_index, level),
+                    "ADC",
+                    "User skipped ADC check; no measurement made.",
+                )
+                if stop:
+                    break
+                continue
+            lines, elapsed, completed = _send_command(
+                ser, "ADC A{} {}".format(analog_index, level), ("=> PASS", "=> FAIL", "ERROR:"),
+                timeout_seconds,
+            )
+            result_line = next(
+                (line for line in lines if line.startswith("ADC A{}".format(analog_index))),
+                "",
+            )
+            status = "pass" if completed and result_line.endswith("=> PASS") else "fail"
+            if "ERROR:" in result_line:
+                status = "fail"
+            adc_value_match = re.search(r"average analogRead=(\d+)", result_line)
+            measurements = [float(adc_value_match.group(1))] if adc_value_match else []
+            adc_tests.append(_test_result(
+                "ADC A{} {}".format(analog_index, level),
+                "ADC",
+                status,
+                result_line or "No ADC result received. Output: {}".format(" | ".join(lines)),
+                elapsed,
+                measurements,
+            ))
+            if stop:
+                break
+        if stop:
+            break
+
+    if stop:
+        _add_skipped(adc_tests, "Remaining ADC checks", "ADC", "Manual tests stopped by user.")
+        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "Manual tests stopped by user.")
+        return
+
+    action = _prompt_run("Connect D11 MOSI <-> D12 MISO; disconnect external SPI devices")
+    if action == "run":
+        lines, elapsed, completed = _send_command(
+            ser, "SPI_LOOPBACK", ("SPI_LOOPBACK RESULT:",), timeout_seconds
+        )
+        result_line = next((line for line in lines if "SPI_LOOPBACK RESULT:" in line), "")
+        status = "pass" if completed and "SPI_LOOPBACK RESULT: PASS" in result_line else "fail"
+        spi_tests.append(_test_result(
+            "SPI MOSI/MISO loopback",
+            "SPI",
+            status,
+            result_line or "No SPI result received. Output: {}".format(" | ".join(lines)),
+            elapsed,
+        ))
+    else:
+        _add_skipped(spi_tests, "SPI MOSI/MISO loopback", "SPI", "User skipped SPI check.")
+
+
+def run_diagnostic(
+    detection: BoardDetection,
+    output_dir: Path,
+    interactive: bool = False,
+    scan_i2c: bool = False,
+    ai_analysis: bool = False,
+    nemotron_model: Optional[str] = None,
+    external_observations_path: Optional[Path] = None,
+    timeout_seconds: float = 5.0,
+) -> DiagnosticReport:
+    """Run the already-uploaded Uno diagnostic sketch and generate reports."""
+    profile = detection.profile
+    if profile is None or profile.board_id != "arduino_uno_r3":
+        raise RuntimeError("The Uno serial adapter requires an exact Arduino Uno R3 profile match.")
+
+    start_time = time.time()
+    host_tests = [
+        _test_result(
+            "USB serial board identity",
+            "Host interface",
+            "pass",
+            "Exact USB VID/PID match for {} on {}.".format(profile.display_name, detection.port),
+        )
+    ]
+    firmware_tests: List[TestResultData] = []
+    led_tests: List[TestResultData] = []
+    gpio_tests: List[TestResultData] = []
+    pwm_tests: List[TestResultData] = []
+    adc_tests: List[TestResultData] = []
+    spi_tests: List[TestResultData] = []
+    i2c_tests: List[TestResultData] = []
+    external = load_external_observations(external_observations_path)
+
+    try:
+        with serial.Serial(detection.port, baudrate=115200, timeout=0.2, write_timeout=2.0) as ser:
+            startup_lines = _read_startup(ser)
+            if _READY_MARKER not in "\n".join(startup_lines):
+                raise RuntimeError(
+                    "Expected the project diagnostic firmware banner was not received. "
+                    "No diagnostic command was sent. Upload firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino "
+                    "manually, close Serial Monitor, and retry."
+                )
+
+            lines, elapsed, completed = _send_command(
+                ser, "INFO", (_INFO_MARKER,), timeout_seconds
+            )
+            info = "\n".join(lines)
+            if not completed or "BOARD:ARDUINO_UNO_R3" not in info or "FIRMWARE_VERSION:2" not in info:
+                raise RuntimeError(
+                    "The port is an Uno R3, but it did not confirm diagnostic firmware version 2. "
+                    "No other tests were run."
+                )
+            firmware_tests.append(_test_result(
+                "Diagnostic firmware identity",
+                "Firmware handshake",
+                "pass",
+                info,
+                elapsed,
+            ))
+
+            if scan_i2c:
+                i2c_confirm = input(
+                    "I2C scan sends address probes on A4/A5. Confirm any attached modules use "
+                    "compatible voltage levels/pull-ups. Type SCAN to continue: "
+                )
+                if i2c_confirm.strip().upper() == "SCAN":
+                    lines, elapsed, completed = _send_command(
+                        ser, "I2C_SCAN", ("I2C_SCAN RESULT:",), timeout_seconds * 3
+                    )
+                    scan_line = next((line for line in lines if "I2C_SCAN RESULT:" in line), "")
+                    addresses = parse_i2c_addresses(lines)
+                    status = "pass" if completed and scan_line else "fail"
+                    details = scan_line or "I2C scan timed out. Output: {}".format(" | ".join(lines))
+                    i2c_tests.append(_test_result("I2C address scan", "I2C", status, details, elapsed))
+                    for address in addresses:
+                        external.append({
+                            "name": "Unidentified I2C peripheral at 0x{:02X}".format(address),
+                            "interface": "I2C",
+                            "profile": "",
+                            "status": "unknown",
+                            "expected": "Device-specific identity/health test",
+                            "observed": "Address 0x{:02X} acknowledged an I2C address probe.".format(address),
+                            "measurements": {},
+                            "evidence": [
+                                "Arduino Uno R3 I2C scanner reported ACK at this address.",
+                                "No device-specific register or functional test was run.",
+                            ],
+                            "notes": "Address acknowledgement does not identify the device or prove it is healthy.",
+                        })
+                    if not addresses and status == "pass":
+                        i2c_tests[-1].details += " No peripherals ACKed; this is not by itself an MCU failure."
+                else:
+                    _add_skipped(i2c_tests, "I2C address scan", "I2C", "User did not approve I2C bus scan.")
+            if interactive:
+                _run_manual_tests(
+                    ser, gpio_tests, pwm_tests, adc_tests, spi_tests, led_tests, timeout_seconds
+                )
+    except serial.SerialException as exc:
+        raise RuntimeError(
+            "Could not open/use {}. Close Arduino Serial Monitor and other serial applications. ({})".format(
+                detection.port, exc
+            )
+        ) from None
+
+    suites: List[SuiteResultData] = []
+    for name, tests in (
+        ("Host interface", host_tests),
+        ("Firmware handshake", firmware_tests),
+        ("Onboard", led_tests),
+        ("GPIO", gpio_tests),
+        ("PWM", pwm_tests),
+        ("ADC", adc_tests),
+        ("SPI", spi_tests),
+        ("I2C", i2c_tests),
+    ):
+        if tests:
+            suites.append(_make_suite(name, tests))
+
+    test_suites = [suite.name.lower().replace(" ", "-") for suite in suites]
+    report = DiagnosticReport(
+        mcu_family=profile.mcu_family,
+        mcu_part="{} ({})".format(profile.display_name, profile.mcu_part),
+        test_suites=test_suites,
+        suites=suites,
+        external_peripherals=external,
+        duration=time.time() - start_time,
+    )
+
+    if ai_analysis:
+        try:
+            report.ai_analysis = generate_ai_analysis(
+                asdict(report),
+                model=nemotron_model,
+            )
+        except Exception as exc:
+            report.ai_analysis = (
+                "AI analysis unavailable. No AI-generated cause or repair advice was produced. "
+                "Reason: {}: {}".format(type(exc).__name__, exc)
+            )
+
+    ReportGenerator(output_dir).generate(report)
+    return report
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run the board-specific diagnostic sketch on an Arduino Uno R3."
+    )
+    parser.add_argument("--port", help="Serial port (e.g. COM9); auto-selects only if exactly one Uno R3 is detected.")
+    parser.add_argument("--output", default="./results/arduino_uno_r3", help="Directory for TXT/HTML/JSON reports.")
+    parser.add_argument("--interactive", action="store_true", help="Run GPIO, PWM, ADC, LED and SPI tests with jumper prompts.")
+    parser.add_argument("--scan-i2c", action="store_true", help="Scan I2C addresses after explicit voltage/wiring confirmation.")
+    parser.add_argument("--ai-analysis", action="store_true", help="Add optional NVIDIA Nemotron analysis to reports.")
+    parser.add_argument("--nemotron-model", default=None, help="Optional NVIDIA NIM model identifier.")
+    parser.add_argument("--external-observations", help="JSON file with separately recorded peripheral evidence.")
+    parser.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for each firmware command response.")
+    parser.add_argument("--yes-reset", action="store_true", help="Confirm the serial port may auto-reset the Uno when opened.")
+    args = parser.parse_args(argv)
+
+    try:
+        detection = _choose_port(args.port)
+        print(
+            "Detected {} ({}) on {} using exact USB identity.".format(
+                detection.profile.display_name, detection.profile.mcu_part, detection.port
+            )
+        )
+        print("This runner does not upload firmware. Opening the serial port usually auto-resets the board.")
+        if not args.yes_reset:
+            confirmation = input("Type RESET to continue; anything else cancels: ")
+            if confirmation.strip().upper() != "RESET":
+                print("Cancelled; no serial port opened.")
+                return 0
+
+        report = run_diagnostic(
+            detection=detection,
+            output_dir=Path(args.output),
+            interactive=args.interactive,
+            scan_i2c=args.scan_i2c,
+            ai_analysis=args.ai_analysis,
+            nemotron_model=args.nemotron_model,
+            external_observations_path=(
+                Path(args.external_observations) if args.external_observations else None
+            ),
+            timeout_seconds=args.timeout,
+        )
+    except (RuntimeError, ValueError, OSError) as exc:
+        print("Diagnostic runner stopped safely: {}".format(exc), file=sys.stderr)
+        return 2
+
+    print()
+    print("=== Arduino Uno R3 Diagnostic Complete ===")
+    print("Tests: {} ({} passed, {} failed, {} skipped)".format(
+        report.total_tests, report.passed, report.failed, report.skipped
+    ))
+    if report.external_peripherals:
+        print("External observations: {} (not necessarily identified or fully tested)".format(
+            len(report.external_peripherals)
+        ))
+    print("Text report: {}".format(report.report_path))
+    print("HTML report: {}".format(report.html_path))
+    print("JSON report: {}".format(report.json_path))
+    if report.failed:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
