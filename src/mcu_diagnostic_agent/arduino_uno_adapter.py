@@ -1,7 +1,7 @@
 """Host runner for the board-specific Arduino Uno R3 diagnostic sketch.
 
 This runner never uploads firmware. The matching sketch must be uploaded manually
-from firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino before running pin tests.
+from firmware/arduino_uno_r3/arduino_uno_r3.ino before running pin tests.
 """
 
 import argparse
@@ -422,7 +422,7 @@ def run_diagnostic(
                 if _READY_MARKER not in "\n".join(startup_lines):
                     raise RuntimeError(
                         "Expected the project diagnostic firmware banner was not received. "
-                        "No diagnostic command was sent. Upload firmware/arduino_uno_r3/Uno_R3_Diagnostic.ino "
+                        "No diagnostic command was sent. Upload firmware/arduino_uno_r3/arduino_uno_r3.ino "
                         "manually, close Serial Monitor, and retry."
                     )
 
