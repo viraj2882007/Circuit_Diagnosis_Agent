@@ -5,6 +5,7 @@ Report Generator - Generates diagnostic reports in multiple formats.
 import html as html_lib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
@@ -107,6 +108,25 @@ def format_duration(value: Optional[float], suffix: str) -> str:
     return "{:.1f}{}".format(value, suffix)
 
 
+def _write_text_atomic(path: Path, content: str) -> None:
+    """Write UTF-8 content to a temporary sibling, then atomically replace the destination."""
+    if not content:
+        raise ValueError("Refusing to write an empty report to {}".format(path))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        with open(temporary, "w", encoding="utf-8", newline="\\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if temporary.stat().st_size == 0:
+            raise OSError("Refusing to replace report with an empty file: {}".format(path))
+        os.replace(str(temporary), str(path))
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
 class ReportGenerator:
     """Generates diagnostic reports in multiple formats."""
 
@@ -138,14 +158,14 @@ class ReportGenerator:
     def _generate_json(self, report: DiagnosticReport, path: Path) -> None:
         """Generate JSON report."""
         data = asdict(report)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2)
+        _write_text_atomic(path, json.dumps(data, indent=2, ensure_ascii=False))
 
     def _generate_html(self, report: DiagnosticReport, path: Path) -> None:
         """Generate HTML report."""
         html = self._build_html(report)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(html)
+        if not html.strip().lower().endswith("</html>"):
+            raise ValueError("Generated HTML report is incomplete.")
+        _write_text_atomic(path, html)
 
     def _build_html(self, report: DiagnosticReport) -> str:
         """Build HTML report content."""
