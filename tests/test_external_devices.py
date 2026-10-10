@@ -16,6 +16,7 @@ def test_bmp280_chip_id_is_identified_from_address_and_register_value():
 
     assert profile is not None
     assert profile.profile_id == "bmp280"
+    assert match_i2c_identity(0x77, 0xD0, 0x56) is None
 
 
 def test_address_ack_without_expected_identity_does_not_identify_device():
