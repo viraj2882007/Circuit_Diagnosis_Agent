@@ -44,6 +44,12 @@ def parse_pair_results(lines: Sequence[str]) -> List[Tuple[str, str, str]]:
     return parsed
 
 
+def parse_adc_measurement(line: str) -> Optional[int]:
+    """Extract an ADC raw reading from a firmware result line."""
+    match = re.search(r"average analogRead=(\d+)", line)
+    return int(match.group(1)) if match else None
+
+
 def parse_i2c_addresses(lines: Sequence[str]) -> List[int]:
     """Return I2C addresses reported by the scan command, without inferring device identity."""
     addresses: List[int] = []
@@ -317,8 +323,8 @@ def _run_manual_tests(
             status = "pass" if completed and result_line.endswith("=> PASS") else "fail"
             if "ERROR:" in result_line:
                 status = "fail"
-            adc_value_match = re.search(r"average analogRead=(\d+)", result_line)
-            measurements = [float(adc_value_match.group(1))] if adc_value_match else []
+            adc_value = parse_adc_measurement(result_line)
+            measurements = [float(adc_value)] if adc_value is not None else []
             adc_tests.append(_test_result(
                 name, "ADC", status,
                 result_line or "No ADC result received. Output: {}".format(" | ".join(lines)),
