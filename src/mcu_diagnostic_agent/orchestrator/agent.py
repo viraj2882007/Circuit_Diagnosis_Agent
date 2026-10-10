@@ -284,6 +284,16 @@ class DiagnosticAgent:
 
 async def main_async(args: argparse.Namespace) -> int:
     """Async main entry point."""
+    if str(getattr(args, "family", "")).lower() == "arduino":
+        print(
+            "Safety stop: the generic Arduino probe/flashing path is disabled because pin maps and "
+            "firmware handling are board-specific. For Uno R3, use the board-aware workflow: "
+            "mcu-board, manually upload firmware/arduino_uno_r3/arduino_uno_r3.ino in Arduino IDE, "
+            "then run mcu-uno-test --port COMx. Other Arduino profiles currently support discovery "
+            "and plan preview only.",
+            file=sys.stderr,
+        )
+        return 2
     config = DiagnosticConfig(
         mcu_family=args.family,
         mcu_part=args.part,
