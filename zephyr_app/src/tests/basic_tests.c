@@ -146,7 +146,7 @@ int test_gpio_toggle(struct diagnostic_context *ctx, struct test_result *result)
 
     test_result_set_pass(result, "GPIO toggle test passed (10 cycles)");
 #else
-    test_result_set_skip(result, "GPIO not available")
+    test_result_set_skip(result, "GPIO not available");
 #endif
     return 0;
 }
