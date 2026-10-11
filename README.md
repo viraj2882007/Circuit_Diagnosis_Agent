@@ -146,20 +146,26 @@ mcu-fault-eval .\\results\\fault-injection-cases.json --output .\\results\\fault
 
 The primary metric is correctly identified injected faults divided by all injected faults. Unreviewed trials remain in the denominator and are never counted as correct. Per-fault scores and review coverage are also reported. This avoids claiming measured accuracy before real fault-injection trials and ground-truth review are completed.
 
-The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
+The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP180, BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
 
-### Test Suites
+### Zephyr test suites
 
-| Suite | Tests | Description |
+The Zephyr app maps suite names to the actual test-case arrays compiled into the firmware. The default build requests these suites:
+
+| Suite name | Tests | Notes |
 | --- | --- | --- |
-| `basic` | cpu_id, ram_march_quick, flash_id, clock_check, gpio_toggle, entropy | Core functionality |
-| `gpio` | gpio_output, gpio_input_pullup, gpio_input_pulldown, gpio_interrupt, gpio_short_detect | All GPIO modes |
-| `analog` | adc_internal_temp, adc_vref, adc_external, dac_output, dac_adc_loopback | ADC/DAC |
-| `communication` | uart_loopback, uart_baud_rates, spi_loopback, spi_frequency, i2c_scan, i2c_eeprom, i2c_speed | Serial interfaces |
-| `timing` | pwm_output, timer_count, input_capture, rtc_test | Timers/PWM |
-| `memory` | flash_write_read, flash_erase, ram_march, ram_extended_march | Memory integrity |
-| `clock` | sys_clock, clock_control, external_crystal, pll_config | Clock subsystem |
-| `advanced` | usb_enumerate, wifi_scan, bluetooth_adv, ethernet_link, crypto_accel | Advanced features |
+| `basic` | cpu_id, ram_march_quick, flash_id, clock_check, gpio_toggle, entropy | Core checks |
+| `gpio` | gpio_output, gpio_input_pullup, gpio_input_pulldown, gpio_interrupt, gpio_short_detect | Some tests need signal/wiring support; board pin maps vary |
+| `adc` | adc_internal_temp, adc_vref, adc_external | Reference channels and input ranges are MCU-specific |
+| `dac` | dac_output, dac_adc_loopback | DAC is unavailable on some MCUs; loopback requires supported hardware and wiring |
+| `uart` | uart_loopback, uart_baud_rates | Loopback requires a correctly wired test path |
+| `spi` | spi_loopback, spi_frequency | Physical loopback/wiring may be required |
+| `i2c` | i2c_scan, i2c_eeprom, i2c_speed | Scan results depend on a known bus and attached devices |
+| `timing` | pwm_output, timer_count, input_capture, rtc_test | Timer features vary by SoC |
+| `memory` | flash_write_read, flash_erase, ram_march, ram_extended_march | Flash write/erase tests can modify data; use only with an approved recovery plan |
+| `clock` | sys_clock, clock_control, external_crystal, pll_config | External-clock checks require board-specific support |
+
+A test suite being compiled does not mean it has been executed on hardware. Unsupported peripherals should be skipped based on the selected board/device capability; measured hardware validation still requires the corresponding target and test setup.
 
 ## Architecture
 
