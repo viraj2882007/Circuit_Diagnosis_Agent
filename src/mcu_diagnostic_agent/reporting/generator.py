@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TestResultData:
     """Serializable test result."""
+
+    # This is a report-data model imported by tests, not a pytest test class.
+    __test__ = False
+
     name: str
     suite: str
     status: str
@@ -360,5 +364,8 @@ class ReportGenerator:
 
             if report.failed > 0 or report.external_failed > 0:
                 f.write(f"\n{'!'*50}\n")
-                f.write(f"FAILED TESTS DETECTED - Hardware may be defective\n")
+                f.write(
+                    "FAILURES RECORDED - Review individual evidence; "
+                    "a failed check does not by itself prove hardware is defective.\n"
+                )
                 f.write(f"{'!'*50}\n")
