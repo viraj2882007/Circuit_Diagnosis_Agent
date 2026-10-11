@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include "test_framework.h"
+#include "reporting.h"
 
 #define MAX_RESULTS 128
 
@@ -203,12 +204,3 @@ void diagnostic_set_device_id(struct diagnostic_context *ctx,
         ctx->device_id_len = len;
     }
 }
-
-/* Reporting functions - implemented in reporting.c */
-extern void diagnostic_send_test_result(struct diagnostic_context *ctx,
-                                        const struct test_result *result);
-extern void diagnostic_send_suite_summary(struct diagnostic_context *ctx,
-                                          const char *suite_name,
-                                          int passed, int failed, int skipped);
-extern int diagnostic_send_final_report(struct diagnostic_context *ctx);
-extern void diagnostic_send_device_info(struct diagnostic_context *ctx);
