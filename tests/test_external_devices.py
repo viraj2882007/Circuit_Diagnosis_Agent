@@ -46,3 +46,15 @@ def test_bmp180_chip_id_is_identified_from_address_and_register_value():
     assert profile.profile_id == "bmp180"
     assert match_i2c_identity(0x77, 0xD0, 0x58).profile_id == "bmp280"
     assert match_i2c_identity(0x76, 0xD0, 0x55) is None
+
+
+def test_adxl345_device_id_is_identified_at_both_supported_addresses():
+    assert match_i2c_identity(0x53, 0x00, 0xE5).profile_id == "adxl345"
+    assert match_i2c_identity(0x1D, 0x00, 0xE5).profile_id == "adxl345"
+    assert match_i2c_identity(0x53, 0x00, 0x00) is None
+
+
+def test_bno055_chip_id_is_identified_from_chip_id_register():
+    assert match_i2c_identity(0x28, 0x00, 0xA0).profile_id == "bno055"
+    assert match_i2c_identity(0x29, 0x00, 0xA0).profile_id == "bno055"
+    assert match_i2c_identity(0x29, 0x00, 0x69) is None
