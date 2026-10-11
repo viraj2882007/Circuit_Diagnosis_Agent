@@ -13,6 +13,10 @@
 extern "C" {
 #endif
 
+/* Forward declarations used in callback signatures. */
+struct diagnostic_context;
+struct test_result;
+
 /* Test status codes */
 typedef enum {
     TEST_PASS = 0,
