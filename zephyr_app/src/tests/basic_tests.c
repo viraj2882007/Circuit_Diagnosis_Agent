@@ -5,7 +5,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/hwinfo.h>
-#include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/entropy.h>
 #include <string.h>
 #include <stdio.h>
@@ -77,33 +76,10 @@ int test_ram_march_quick(struct diagnostic_context *ctx, struct test_result *res
     return 0;
 }
 
-/* Test: Flash ID / JEDEC */
+/* Flash capacity/identity APIs vary by board; avoid unconditional flash0 references. */
 int test_flash_id(struct diagnostic_context *ctx, struct test_result *result)
 {
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(flash0), okay)
-    const struct device *flash_dev = DEVICE_DT_GET(DT_NODELABEL(flash0));
-    if (!device_is_ready(flash_dev)) {
-        test_result_set_skip(result, "Flash not available");
-        return 0;
-    }
-
-    const struct flash_parameters *params = flash_get_parameters(flash_dev);
-    if (!params) {
-        test_result_set_fail(result, "Flash parameters not available");
-        return 0;
-    }
-
-    char details[256];
-    snprintf(details, sizeof(details),
-             "Flash device ready: erase_value=0x%02X, write_block=%zu bytes; capacity not reported by this API",
-             params->erase_value, params->write_block_size);
-
-    test_result_set_pass(result, details);
-    test_result_add_measurement(result, params->erase_value);
-    test_result_add_measurement(result, params->write_block_size);
-#else
-    test_result_set_skip(result, "Flash not available");
-#endif
+    test_result_set_skip(result, "Flash identity requires a board-specific supported flash profile.");
     return 0;
 }
 
