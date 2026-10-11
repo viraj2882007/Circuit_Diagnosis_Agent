@@ -10,8 +10,6 @@
 
 #include "test_framework.h"
 
-#include "test_framework.h"
-
 /* I2C bus selection is board-specific. Do not probe arbitrary attached devices
  * during boot until a user-selected, voltage-verified bus profile exists.
  */
