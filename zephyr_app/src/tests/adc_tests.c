@@ -39,13 +39,7 @@ static const struct adc_channel_cfg vref_channel_cfg = {
 };
 #endif
 
-static const struct adc_channel_cfg ext_channel_cfg = {
-    .gain = ADC_GAIN_1,
-    .reference = ADC_REF_INTERNAL,
-    .acquisition_time = ADC_ACQ_TIME_DEFAULT,
-    .channel_id = 0,  /* External channel 0 */
-    .differential = 0,
-};
+
 
 /* Test: Internal temperature sensor */
 int test_adc_internal_temp(struct diagnostic_context *ctx, struct test_result *result)
