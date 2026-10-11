@@ -86,13 +86,14 @@ int main(void)
     reporting_init(uart_dev);
 
     uint8_t dev_id[32] = {0};
-    size_t id_len = sizeof(dev_id);
-    ret = hwinfo_get_device_id(dev_id, &id_len);
-    if (ret < 0) {
-        id_len = 0;
-        LOG_WRN("MCU device ID unavailable: %d", ret);
-    } else if (id_len > sizeof(dev_id)) {
+    size_t id_len = 0;
+    int id_bytes = (int)hwinfo_get_device_id(dev_id, sizeof(dev_id));
+    if (id_bytes < 0) {
+        LOG_WRN("MCU device ID unavailable: %d", id_bytes);
+    } else if ((size_t)id_bytes > sizeof(dev_id)) {
         id_len = sizeof(dev_id);
+    } else {
+        id_len = (size_t)id_bytes;
     }
     diagnostic_set_device_id(&diag_ctx, dev_id, id_len);
     diagnostic_send_device_info(&diag_ctx);
