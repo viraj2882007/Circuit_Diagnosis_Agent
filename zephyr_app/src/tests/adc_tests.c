@@ -73,26 +73,26 @@ int test_adc_internal_temp(struct diagnostic_context *ctx, struct test_result *r
     }
 
     uint16_t raw = *(uint16_t *)sequence.buffer;
-    float voltage = (raw * 3.3f) / 4095.0f;
+    /* Integer-only estimate assumes a nominal 3.300 V ADC reference. */
+    uint32_t millivolts = ((uint32_t)raw * 3300U) / 4095U;
 
-    /* Temperature calculation (STM32 formula, adjust per MCU) */
-    /* Typical: V25 = 0.76V, Avg_Slope = 2.5mV/°C */
-    float temp_c = ((voltage - 0.76f) / 0.0025f) + 25.0f;
+    /* STM32-like internal sensor approximation: V25=760 mV, slope=2.5 mV/°C. */
+    int32_t temp_c_x10 = (((int32_t)millivolts - 760) * 4) + 250;
 
     char details[128];
     snprintf(details, sizeof(details),
-             "Raw: %u, Voltage: %.3fV, Temp: %.1f°C", raw, voltage, temp_c);
+             "Raw: %u, nominal_Vref=3300mV, estimated_voltage=%lumV, temp_x10_C=%ld",
+             raw, (unsigned long)millivolts, (long)temp_c_x10);
 
-    /* Sanity check: -40 to 125°C */
-    if (temp_c > -40.0f && temp_c < 125.0f) {
+    /* This temperature model is device-specific; only a broad plausibility check is made. */
+    if (temp_c_x10 > -400 && temp_c_x10 < 1250) {
         test_result_set_pass(result, details);
     } else {
         test_result_set_fail(result, details);
     }
 
     test_result_add_measurement(result, raw);
-    test_result_add_measurement(result, (uint32_t)(voltage * 1000));
-    test_result_add_measurement(result, (uint32_t)(temp_c * 10));
+    test_result_add_measurement(result, millivolts);
 
     return 0;
 }
@@ -125,20 +125,22 @@ int test_adc_vref(struct diagnostic_context *ctx, struct test_result *result)
     }
 
     uint16_t raw = *(uint16_t *)sequence.buffer;
-    float voltage = (raw * 3.3f) / 4095.0f;
+    uint32_t millivolts = ((uint32_t)raw * 3300U) / 4095U;
 
     char details[128];
-    snprintf(details, sizeof(details), "VREF Raw: %u, Voltage: %.3fV", raw, voltage);
+    snprintf(details, sizeof(details),
+             "VREF Raw: %u, nominal_Vref=3300mV, estimated_internal_Vref=%lumV",
+             raw, (unsigned long)millivolts);
 
-    /* VREF should be around 1.2V (internal reference) */
-    if (voltage > 1.0f && voltage < 1.4f) {
+    /* VREF is expected around 1.0-1.4 V only for supported sensors with this profile. */
+    if (millivolts > 1000U && millivolts < 1400U) {
         test_result_set_pass(result, details);
     } else {
         test_result_set_fail(result, details);
     }
 
     test_result_add_measurement(result, raw);
-    test_result_add_measurement(result, (uint32_t)(voltage * 1000));
+    test_result_add_measurement(result, millivolts);
 
     return 0;
 }
@@ -179,20 +181,22 @@ int test_adc_external(struct diagnostic_context *ctx, struct test_result *result
     }
 
     uint16_t avg = sum / samples;
-    float voltage = (avg * 3.3f) / 4095.0f;
+    uint32_t estimated_millivolts = ((uint32_t)avg * 3300U) / 4095U;
 
-    char details[128];
-    snprintf(details, sizeof(details), "Ext ADC Avg: %u, Voltage: %.3fV", avg, voltage);
+    char details[160];
+    snprintf(details, sizeof(details),
+             "Ext ADC Avg: %u/4095, estimated_voltage=%lumV assuming nominal 3300mV reference",
+             avg, (unsigned long)estimated_millivolts);
 
-    /* Just verify it reads something reasonable (0-3.3V) */
-    if (voltage >= 0.0f && voltage <= 3.3f) {
+    /* Range plausibility only; calibration accuracy requires an independent voltage reference. */
+    if (avg <= 4095U) {
         test_result_set_pass(result, details);
     } else {
         test_result_set_fail(result, details);
     }
 
     test_result_add_measurement(result, avg);
-    test_result_add_measurement(result, (uint32_t)(voltage * 1000));
+    test_result_add_measurement(result, estimated_millivolts);
 
     return 0;
 }
