@@ -14,10 +14,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board:
-          - stm32f4_disco
-          - esp32_devkitc/esp32/procpu
-          - rpi_pico
+        include:
+          - board: stm32f4_disco
+            toolchains: arm-zephyr-eabi
+          - board: rpi_pico
+            toolchains: arm-zephyr-eabi
+          - board: esp32_devkitc/esp32/procpu
+            toolchains: xtensa-espressif_esp32_zephyr-elf
     steps:
       - name: Check out project
         uses: actions/checkout@v4
@@ -26,7 +29,7 @@ jobs:
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: zephyr_app
-          toolchains: arm-zephyr-eabi:xtensa-espressif_esp32_zephyr-elf
+          toolchains: ${{ matrix.toolchains }}
 
       - name: Compile diagnostic firmware
         run: west build -p always -b "${{ matrix.board }}" zephyr_app
