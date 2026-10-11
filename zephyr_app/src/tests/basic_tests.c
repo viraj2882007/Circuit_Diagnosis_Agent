@@ -108,8 +108,8 @@ int test_clock_check(struct diagnostic_context *ctx, struct test_result *result)
     uint32_t freq = sys_clock_hw_cycles_per_sec();
 
     char details[128];
-    snprintf(details, sizeof(details), "System clock: %u Hz (%.2f MHz)",
-             freq, freq / 1000000.0);
+    snprintf(details, sizeof(details), "System clock: %u Hz (%u.%02u MHz)",
+             freq, freq / 1000000U, (freq % 1000000U) / 10000U);
 
     if (freq > 1000000 && freq < 500000000) {
         test_result_set_pass(result, details);
