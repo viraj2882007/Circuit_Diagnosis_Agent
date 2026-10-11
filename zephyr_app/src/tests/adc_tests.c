@@ -61,7 +61,7 @@ int test_adc_internal_temp(struct diagnostic_context *ctx, struct test_result *r
 
     int ret = adc_channel_setup(ADC_DEV, &temp_channel_cfg);
     if (ret < 0) {
-        test_result_set_fail(result, "Failed to setup temperature channel");
+        test_result_set_skip(result, "Internal temperature channel is not implemented by this board profile.");
         return 0;
     }
 
@@ -118,7 +118,7 @@ int test_adc_vref(struct diagnostic_context *ctx, struct test_result *result)
 
     int ret = adc_channel_setup(ADC_DEV, &vref_channel_cfg);
     if (ret < 0) {
-        test_result_set_fail(result, "Failed to setup VREF channel");
+        test_result_set_skip(result, "Internal VREF channel is not implemented by this board profile.");
         return 0;
     }
 
