@@ -14,7 +14,6 @@ JSON_SCHEMA_KEYS = (
     "automatic_fix_suggestions",
 )
 
-_STRUCTURED_SYSTEM_PROMPT = _SYSTEM_PROMPT if False else ""  # Defined after the Markdown prompt below.
 
 
 from __future__ import annotations
