@@ -1,7 +1,10 @@
 name: Zephyr firmware builds
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
+      - feat/nemotron-peripheral-diagnostics
   workflow_dispatch:
 
 jobs:
