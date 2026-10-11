@@ -161,7 +161,7 @@ The current Uno runner does not automatically inject physical faults. I2C-line f
 
 The Uno PWM test now records pulse HIGH/LOW durations and estimates frequency (Hz) and duty cycle (%) from the loopback using the MCU's `pulseIn` timer. This is coarse software-timed evidence, not calibrated instrumentation; validate it against a logic analyzer or oscilloscope before treating the values as precision measurements. ADC loopback reports raw counts against known LOW/HIGH levels. A true supply-voltage reading or ADC accuracy calibration requires an independently measured reference (for example, a multimeter) and should be added as a recorded external observation; the software does not pretend to measure VCC without one.
 
-The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP180, BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
+The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP180, BMP280, BME280, MPU-6050, LIS3DH, LSM6DS3, ADXL345 and BNO055). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
 
 ### Zephyr test suites
 
@@ -183,6 +183,8 @@ The Zephyr app maps suite names to the actual test-case arrays compiled into the
 A test suite being compiled does not mean it has been executed on hardware. Unsupported peripherals should be skipped based on the selected board/device capability; measured hardware validation still requires the corresponding target and test setup.
 
 The generic Zephyr memory tests are intentionally non-destructive: flash-write and flash-erase test names return **SKIP** because a generic app cannot safely guess an unused flash sector or guarantee firmware/data recovery. RAM checks use dedicated reserved buffers in `.bss`; they validate those buffers only, not every physical RAM cell. No RAM test writes to a hard-coded address such as `0x20000000`.
+
+For the same safety reason, generic Zephyr tests that would drive unprofiled pins, transmit SPI data to unknown devices, reconfigure the reporting UART, write I2C EEPROM, or alter generic timer/DAC outputs return **SKIP** until a board-specific pin/bus profile and appropriate external measurement fixture are selected. The Zephyr build matrix validates compile compatibility; it does not establish hardware pass/fail or replace the Uno R3’s board-specific test adapter.
 
 ## Architecture
 
