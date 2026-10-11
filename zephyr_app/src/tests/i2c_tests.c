@@ -10,79 +10,26 @@
 
 #include "test_framework.h"
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(i2c0), okay)
-#define I2C_DEV DEVICE_DT_GET(DT_NODELABEL(i2c0))
-#elif DT_NODE_HAS_STATUS(DT_NODELABEL(i2c1), okay)
-#define I2C_DEV DEVICE_DT_GET(DT_NODELABEL(i2c1))
-#else
-#define I2C_DEV NULL
-#endif
+#include "test_framework.h"
 
-#define I2C_TEST_ADDR 0x50  /* Typical EEPROM address */
-
-/* Test: I2C bus scan */
+/* I2C bus selection is board-specific. Do not probe arbitrary attached devices
+ * during boot until a user-selected, voltage-verified bus profile exists.
+ */
 int test_i2c_scan(struct diagnostic_context *ctx, struct test_result *result)
 {
-    if (!I2C_DEV || !device_is_ready(I2C_DEV)) {
-        test_result_set_skip(result, "I2C device not available");
-        return 0;
-    }
-
-    uint8_t found_devices[128] = {0};
-    int device_count = 0;
-
-    for (uint8_t addr = 0x08; addr < 0x78; addr++) {
-        /* Try to write 0 bytes to address */
-        int ret = i2c_write(I2C_DEV, NULL, 0, addr);
-        if (ret == 0) {
-            found_devices[addr] = 1;
-            device_count++;
-        }
-    }
-
-    char details[256];
-    size_t used = 0;
-    int written = snprintf(details, sizeof(details), "I2C scan found %d ACK response(s):", device_count);
-    if (written < 0) {
-        test_result_set_fail(result, "Could not format I2C scan result.");
-        return 0;
-    }
-    used = (size_t)written < sizeof(details) ? (size_t)written : sizeof(details) - 1U;
-
-    for (int addr = 0x08; addr < 0x78 && used < sizeof(details) - 1U; addr++) {
-        if (found_devices[addr]) {
-            written = snprintf(details + used, sizeof(details) - used, " 0x%02X", addr);
-            if (written < 0) break;
-            if ((size_t)written >= sizeof(details) - used) {
-                used = sizeof(details) - 1U;
-                break;
-            }
-            used += (size_t)written;
-        }
-    }
-
-    if (device_count > 0) {
-        test_result_set_pass(result, details);
-    } else {
-        test_result_set_skip(result, "No I2C address ACKed; no device presence was established, so this is not a board failure.");
-    }
-
-    test_result_add_measurement(result, device_count);
-
+    test_result_set_skip(result, "I2C scan requires an explicitly selected, voltage-verified board bus profile.");
     return 0;
 }
 
-/* Writing to a guessed EEPROM address could modify user data; disabled by default. */
 int test_i2c_eeprom(struct diagnostic_context *ctx, struct test_result *result)
 {
     test_result_set_skip(result, "I2C EEPROM writes are disabled without an identified device, reserved test region, and recovery plan.");
     return 0;
 }
 
-/* No controller timing is measured by the old placeholder loop; do not claim PASS. */
 int test_i2c_speed(struct diagnostic_context *ctx, struct test_result *result)
 {
-    test_result_set_skip(result, "I2C speed modes are not measured; add a board-specific timing fixture before validating speed.");
+    test_result_set_skip(result, "I2C speed modes need a board-specific bus and measurement fixture.");
     return 0;
 }
 
