@@ -9,6 +9,7 @@ from mcu_diagnostic_agent.arduino_uno_adapter import (
     parse_firmware_duration,
     parse_i2c_addresses,
     parse_pair_results,
+    parse_pwm_measurements,
 )
 from mcu_diagnostic_agent.board_detection import detect_connected_boards
 
@@ -208,3 +209,10 @@ def test_serial_port_error_generates_failure_report_and_marks_tests_skipped(tmp_
         test.name for suite in report.suites for test in suite.tests
     }
     assert Path(report.json_path).is_file()
+
+
+def test_parse_pwm_measurements_extracts_frequency_and_duty_cycle():
+    assert parse_pwm_measurements(
+        "PWM_MEASUREMENT: high_us=1020 low_us=1020 frequency_hz=490.2 duty_percent=50.0"
+    ) == [490.2, 50.0]
+    assert parse_pwm_measurements("PWM_MEASUREMENT: unavailable") == []
