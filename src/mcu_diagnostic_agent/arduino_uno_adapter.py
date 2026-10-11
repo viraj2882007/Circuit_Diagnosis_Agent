@@ -464,6 +464,7 @@ def run_diagnostic(
     identify_i2c: bool = False,
     ai_analysis: bool = False,
     nemotron_model: Optional[str] = None,
+    ai_format: str = "markdown",
     external_observations_path: Optional[Path] = None,
     check_signature: bool = True,
     avrdude_executable: Optional[Path] = None,
@@ -736,6 +737,7 @@ def run_diagnostic(
             report.ai_analysis = generate_ai_analysis(
                 asdict(report),
                 model=nemotron_model,
+                output_format=ai_format,
             )
         except Exception as exc:
             report.ai_analysis = (
@@ -759,6 +761,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--identify-i2c", action="store_true", help="Also read documented ID registers for known supported sensors; implies --scan-i2c.")
     parser.add_argument("--ai-analysis", action="store_true", help="Add optional NVIDIA Nemotron analysis to reports.")
     parser.add_argument("--nemotron-model", default=None, help="Optional NVIDIA NIM model identifier.")
+    parser.add_argument("--ai-format", choices=["markdown", "json"], default="markdown",
+                        help="Format for Nemotron analysis; JSON includes evidence, ranked causes, repairability, and safe fix suggestions.")
     parser.add_argument("--external-observations", help="JSON file with separately recorded peripheral evidence.")
     parser.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for each firmware command response.")
     parser.add_argument("--skip-signature-check", action="store_true", help="Skip AVRDUDE MCU signature verification.")
@@ -789,6 +793,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             identify_i2c=args.identify_i2c,
             ai_analysis=args.ai_analysis,
             nemotron_model=args.nemotron_model,
+            ai_format=args.ai_format,
             external_observations_path=(
                 Path(args.external_observations) if args.external_observations else None
             ),
