@@ -95,12 +95,12 @@ int test_flash_id(struct diagnostic_context *ctx, struct test_result *result)
 
     char details[256];
     snprintf(details, sizeof(details),
-             "Flash: size=%zu KB, erase_value=0x%02X, write_block=%zu",
-             params->size / 1024, params->erase_value, params->write_block_size);
+             "Flash device ready: erase_value=0x%02X, write_block=%zu bytes; capacity not reported by this API",
+             params->erase_value, params->write_block_size);
 
     test_result_set_pass(result, details);
-    test_result_add_measurement(result, params->size / 1024);
     test_result_add_measurement(result, params->erase_value);
+    test_result_add_measurement(result, params->write_block_size);
 #else
     test_result_set_skip(result, "Flash not available");
 #endif
