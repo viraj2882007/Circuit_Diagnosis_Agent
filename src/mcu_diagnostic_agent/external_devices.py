@@ -69,6 +69,22 @@ I2C_IDENTITY_PROFILES: Tuple[I2CIdentityProfile, ...] = (
         expected_values=(0x69,),
         notes="WHO_AM_I register 0x0F.",
     ),
+    I2CIdentityProfile(
+        profile_id="adxl345",
+        display_name="Analog Devices ADXL345 accelerometer",
+        addresses=(0x1D, 0x53),
+        identity_register=0x00,
+        expected_values=(0xE5,),
+        notes="DEVID register 0x00; addresses vary with the ALT ADDRESS pin.",
+    ),
+    I2CIdentityProfile(
+        profile_id="bno055",
+        display_name="Bosch BNO055 9-axis sensor",
+        addresses=(0x28, 0x29),
+        identity_register=0x00,
+        expected_values=(0xA0,),
+        notes="CHIP_ID register 0x00; read after the device has completed startup.",
+    ),
 )
 
 
