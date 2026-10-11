@@ -191,7 +191,7 @@ int test_gpio_input_pulldown(struct diagnostic_context *ctx, struct test_result 
     test_result_add_measurement(result, passed);
     test_result_add_measurement(result, total);
 
-    return 0
+    return 0;
 }
 
 /* Test: GPIO interrupt */
