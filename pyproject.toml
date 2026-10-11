@@ -48,6 +48,7 @@ viz = [
 mcu-diag = "mcu_diagnostic_agent.orchestrator.agent:main"
 mcu-board = "mcu_diagnostic_agent.board_detection:main"
 mcu-uno-test = "mcu_diagnostic_agent.arduino_uno_adapter:main"
+mcu-fault-eval = "mcu_diagnostic_agent.fault_injection:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
