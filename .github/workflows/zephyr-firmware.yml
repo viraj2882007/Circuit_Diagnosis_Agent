@@ -27,7 +27,7 @@ jobs:
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: zephyr_app
-          toolchains: arm-zephyr-eabi:xtensa-espressif_esp32
+          toolchains: arm-zephyr-eabi:xtensa-espressif_esp32_zephyr-elf
 
       - name: Compile diagnostic firmware
         run: west build -p always -b "${{ matrix.board }}" zephyr_app
