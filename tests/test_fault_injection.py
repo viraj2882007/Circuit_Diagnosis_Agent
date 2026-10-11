@@ -22,7 +22,7 @@ def test_accuracy_uses_all_injected_faults_and_reports_review_coverage():
     assert summary["reviewed_cases"] == 3
     assert summary["review_coverage_percent"] == 75.0
     assert len(result["per_fault"]) == 3
-    assert "do not inject" in " ".join(result["limitations"]).lower()
+    assert "does not inject faults" in " ".join(result["limitations"]).lower()
 
 
 def test_fault_evaluator_rejects_duplicate_case_ids():
