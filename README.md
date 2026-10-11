@@ -116,6 +116,36 @@ mcu-uno-test --port COM9 --ai-analysis --ai-format json
 
 The `--ai-format json` option requests a JSON object from NVIDIA NIM, validates required fields, and forcibly marks every fix suggestion as advisory (`automatic_execution: false`). It does not execute suggested fixes. Malformed model JSON produces an explicit AI-analysis error rather than being silently treated as valid structured output. The default remains Markdown.
 
+### Fault-injection evaluation
+
+The evaluator scores cases after a tester deliberately injects a known fault, captures the diagnostic report, and reviews whether the diagnosis correctly identified the ground-truth fault. It does **not** physically inject faults or independently verify the review.
+
+Create a UTF-8 JSON file with one record per actual injected-fault trial:
+```json
+{
+  "cases": [
+    {
+      "case_id": "uno-gpio-trial-001",
+      "fault_id": "gpio_open_loopback",
+      "injected_fault": "D2-D3 loopback jumper removed",
+      "expected_diagnosis": "Open/missing loopback connection",
+      "observed_diagnosis": "Diagnosis text from the report",
+      "assessment": "unreviewed",
+      "reviewer_note": "Assess this against the known injected fault",
+      "report_path": "results/arduino_uno_r3/your_actual_report.json"
+    }
+  ]
+}
+```
+
+The example above is a **schema example, not a real test result**. Replace the values with your actual trials, and set `assessment` after review to `correct`, `incorrect`, `missed`, `inconclusive`, or `unreviewed`.
+
+```powershell
+mcu-fault-eval .\\results\\fault-injection-cases.json --output .\\results\\fault-injection-score.json
+```
+
+The primary metric is correctly identified injected faults divided by all injected faults. Unreviewed trials remain in the denominator and are never counted as correct. Per-fault scores and review coverage are also reported. This avoids claiming measured accuracy before real fault-injection trials and ground-truth review are completed.
+
 The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
 
 ### Test Suites
