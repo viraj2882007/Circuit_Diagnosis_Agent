@@ -10,20 +10,10 @@
 
 #include "test_framework.h"
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay)
-#define SPI_DEV DEVICE_DT_GET(DT_NODELABEL(spi0))
-#else
-#define SPI_DEV NULL
-#endif
-
-/* SPI loopback test pattern */
-static const uint8_t spi_tx_pattern[] = {0x00, 0xFF, 0xAA, 0x55, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
-static uint8_t spi_rx_buffer[sizeof(spi_tx_pattern)];
-
-/* Avoid transmitting test data to unknown attached SPI devices by default. */
+/* Generic SPI tests remain skipped until a safe, board-specific bus profile exists. */
 int test_spi_loopback(struct diagnostic_context *ctx, struct test_result *result)
 {
-    test_result_set_skip(result, "SPI loopback requires a board-specific pin route and confirmed device isolation; generic transmission is disabled.");
+    test_result_set_skip(result, "SPI loopback requires a board-specific pin route and confirmed device isolation.");
     return 0;
 }
 
