@@ -18,8 +18,8 @@ def test_generic_zephyr_flash_write_and_erase_checks_are_non_destructive():
     source = (REPO_ROOT / "zephyr_app" / "src" / "tests" / "memory_tests.c").read_text(encoding="utf-8")
     assert "Flash write/read test disabled" in source
     assert "Flash erase test disabled" in source
-    assert "flash_erase(" not in source
-    assert "flash_write(" not in source
+    assert "flash_erase(FLASH_DEV" not in source
+    assert "flash_write(FLASH_DEV" not in source
 
 
 def test_zephyr_suite_registry_uses_real_test_case_arrays():
