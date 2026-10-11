@@ -57,6 +57,15 @@ def parse_firmware_duration(line: str) -> Optional[float]:
     return float(match.group(1)) if match else None
 
 
+def parse_pwm_measurements(line: str) -> List[float]:
+    """Extract pulseIn-based PWM frequency (Hz) and duty cycle (%) from target evidence."""
+    frequency = re.search(r"frequency_hz=(\d+(?:\.\d+)?)", line, re.IGNORECASE)
+    duty = re.search(r"duty_percent=(\d+(?:\.\d+)?)", line, re.IGNORECASE)
+    if not frequency or not duty:
+        return []
+    return [float(frequency.group(1)), float(duty.group(1))]
+
+
 def parse_i2c_addresses(lines: Sequence[str]) -> List[int]:
     """Return I2C addresses reported by the scan command, without inferring device identity."""
     addresses: List[int] = []
@@ -369,11 +378,15 @@ def _run_manual_tests(
             ser, "PWM {} 2".format(pwm_pin), ("PWM RESULT:",), timeout_seconds
         )
         result_line = next((line for line in lines if "PWM RESULT:" in line), "")
-        status = "pass" if completed and "PWM RESULT: PASS" in result_line else "fail"
+        measurement_line = next((line for line in lines if "PWM_MEASUREMENT: high_us=" in line), "")
+        measured_values = parse_pwm_measurements(measurement_line)
+        status = "pass" if completed and "PWM RESULT: PASS" in result_line and measured_values else "fail"
+        details = " | ".join(part for part in (result_line, measurement_line) if part)
         pwm_tests.append(_test_result(
             name, "PWM", status,
-            result_line or "No PWM result received. Output: {}".format(" | ".join(lines)),
+            details or "No PWM result received. Output: {}".format(" | ".join(lines)),
             parse_firmware_duration(result_line),
+            measured_values,
         ))
 
     for analog_index in range(6):
