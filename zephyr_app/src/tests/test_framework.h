@@ -6,12 +6,17 @@
 #define TEST_FRAMEWORK_H
 
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/gpio.h>
 #include <stdint.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Forward declarations used in callback signatures. */
+struct diagnostic_context;
+struct test_result;
 
 /* Test status codes */
 typedef enum {

@@ -174,6 +174,7 @@ int diagnostic_send_final_report(struct diagnostic_context *ctx)
         switch (ctx->results[i].status) {
             case TEST_PASS: passed++; break;
             case TEST_FAIL: failed++; break;
+            case TEST_ERROR: failed++; break;
             case TEST_SKIP: skipped++; break;
         }
     }

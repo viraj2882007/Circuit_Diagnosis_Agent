@@ -2,8 +2,10 @@
 Report Generator - Generates diagnostic reports in multiple formats.
 """
 
+import html as html_lib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
@@ -16,13 +18,17 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TestResultData:
     """Serializable test result."""
+
+    # This is a report-data model imported by tests, not a pytest test class.
+    __test__ = False
+
     name: str
     suite: str
     status: str
-    duration_ms: float
+    duration_ms: Optional[float]
     details: str
     measurements: List[float]
-    timestamp: float
+    timestamp: Optional[float]
 
 
 @dataclass
@@ -33,7 +39,7 @@ class SuiteResultData:
     passed: int
     failed: int
     skipped: int
-    duration_ms: float
+    duration_ms: Optional[float]
 
 
 @dataclass
@@ -43,7 +49,7 @@ class DiagnosticReport:
     mcu_part: str
     test_suites: List[str]
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    duration: float = 0.0
+    duration: Optional[float] = None
     firmware_version: int = 1
     device_id: str = ""
     suites: List[SuiteResultData] = field(default_factory=list)
@@ -58,6 +64,13 @@ class DiagnosticReport:
     report_path: str = ""
     json_path: str = ""
     html_path: str = ""
+    external_peripherals: List[Dict[str, Any]] = field(default_factory=list)
+    external_passed: int = 0
+    external_failed: int = 0
+    external_warnings: int = 0
+    external_unknown: int = 0
+    untested_peripherals: List[str] = field(default_factory=list)
+    ai_analysis: Optional[str] = None
 
     def __post_init__(self):
         self._compute_totals()
@@ -75,6 +88,48 @@ class DiagnosticReport:
             self.failed += suite.failed
             self.skipped += suite.skipped
 
+        # Keep external observations separate from MCU test-case totals but expose their
+        # outcomes explicitly so callers cannot mistake a peripheral failure for a clean run.
+        self.external_passed = sum(
+            1 for item in self.external_peripherals if item.get("status") == "pass"
+        )
+        self.external_failed = sum(
+            1 for item in self.external_peripherals if item.get("status") == "fail"
+        )
+        self.external_warnings = sum(
+            1 for item in self.external_peripherals if item.get("status") == "warning"
+        )
+        self.external_unknown = sum(
+            1 for item in self.external_peripherals
+            if item.get("status") in {"unknown", "not_tested"}
+        )
+
+
+def format_duration(value: Optional[float], suffix: str) -> str:
+    """Format a measured duration or make missing timing explicit."""
+    if value is None:
+        return "not captured"
+    return "{:.1f}{}".format(value, suffix)
+
+
+def _write_text_atomic(path: Path, content: str) -> None:
+    """Write UTF-8 content to a temporary sibling, then atomically replace the destination."""
+    if not content:
+        raise ValueError("Refusing to write an empty report to {}".format(path))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        with open(temporary, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if temporary.stat().st_size == 0:
+            raise OSError("Refusing to replace report with an empty file: {}".format(path))
+        os.replace(str(temporary), str(path))
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
 
 class ReportGenerator:
     """Generates diagnostic reports in multiple formats."""
@@ -88,20 +143,18 @@ class ReportGenerator:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = f"diag_{report.mcu_family}_{report.mcu_part}_{timestamp}"
 
-        # Generate JSON
+        # Set all output paths before serializing so the JSON report records its own paths.
         json_path = self.output_dir / f"{base_name}.json"
-        self._generate_json(report, json_path)
-        report.json_path = str(json_path)
-
-        # Generate HTML
         html_path = self.output_dir / f"{base_name}.html"
-        self._generate_html(report, html_path)
-        report.html_path = str(html_path)
-
-        # Generate summary text
         txt_path = self.output_dir / f"{base_name}.txt"
-        self._generate_text(report, txt_path)
+        report.json_path = str(json_path)
+        report.html_path = str(html_path)
         report.report_path = str(txt_path)
+
+        # Generate JSON, HTML, and text using UTF-8 for Windows and non-ASCII analysis output.
+        self._generate_json(report, json_path)
+        self._generate_html(report, html_path)
+        self._generate_text(report, txt_path)
 
         logger.info(f"Reports generated: {json_path}, {html_path}, {txt_path}")
         return txt_path
@@ -109,14 +162,14 @@ class ReportGenerator:
     def _generate_json(self, report: DiagnosticReport, path: Path) -> None:
         """Generate JSON report."""
         data = asdict(report)
-        with open(path, 'w') as f:
-            json.dump(data, f, indent=2)
+        _write_text_atomic(path, json.dumps(data, indent=2, ensure_ascii=False))
 
     def _generate_html(self, report: DiagnosticReport, path: Path) -> None:
         """Generate HTML report."""
         html = self._build_html(report)
-        with open(path, 'w') as f:
-            f.write(html)
+        if not html.strip().lower().endswith("</html>"):
+            raise ValueError("Generated HTML report is incomplete.")
+        _write_text_atomic(path, html)
 
     def _build_html(self, report: DiagnosticReport) -> str:
         """Build HTML report content."""
@@ -130,7 +183,7 @@ class ReportGenerator:
         html = f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>MCU Diagnostic Report - {report.mcu_family} {report.mcu_part}</title>
+    <title>MCU Diagnostic Report - {html_lib.escape(str(report.mcu_family))} {html_lib.escape(str(report.mcu_part))}</title>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; }}
         .header {{ border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }}
@@ -150,17 +203,19 @@ class ReportGenerator:
         .test-status {{ padding: 4px 12px; border-radius: 4px; color: white; font-weight: bold; }}
         .test-details {{ color: #666; font-size: 0.9em; margin-top: 4px; }}
         .measurements {{ color: #999; font-size: 0.8em; font-family: monospace; }}
+        .ai-analysis {{ white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; padding: 16px; border-radius: 8px; }}
+        .evidence-json {{ white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; padding: 16px; border-radius: 8px; }}
     </style>
 </head>
 <body>
     <div class="header">
         <h1>MCU Diagnostic Report</h1>
-        <p><strong>MCU:</strong> {report.mcu_family} {report.mcu_part}</p>
-        <p><strong>Date:</strong> {report.timestamp}</p>
-        <p><strong>Duration:</strong> {report.duration:.1f}s</p>
+        <p><strong>MCU:</strong> {html_lib.escape(str(report.mcu_family))} {html_lib.escape(str(report.mcu_part))}</p>
+        <p><strong>Date:</strong> {html_lib.escape(str(report.timestamp))}</p>
+        <p><strong>Duration:</strong> {format_duration(report.duration, 's')}</p>
         <p><strong>Firmware Version:</strong> {report.firmware_version}</p>
-        <p><strong>Device ID:</strong> {report.device_id}</p>
-        <p><strong>Test Suites:</strong> {', '.join(report.test_suites)}</p>
+        <p><strong>Device ID:</strong> {html_lib.escape(str(report.device_id))}</p>
+        <p><strong>Test Suites:</strong> {html_lib.escape(', '.join(report.test_suites))}</p>
     </div>
 
     <div class="summary">
@@ -186,25 +241,54 @@ class ReportGenerator:
         for suite in report.suites:
             html += f"""
     <div class="suite">
-        <h2>{suite.name} ({suite.passed} passed, {suite.failed} failed, {suite.skipped} skipped)</h2>
+        <h2>{html_lib.escape(str(suite.name))} ({suite.passed} passed, {suite.failed} failed, {suite.skipped} skipped)</h2>
 """
 
             for test in suite.tests:
                 color = status_colors.get(test.status, '#6c757d')
                 meas_str = ', '.join(f'{m:.2f}' for m in test.measurements) if test.measurements else ''
+                duration_text = format_duration(test.duration_ms, "ms")
 
                 html += f"""
         <div class="test">
             <div>
-                <div class="test-name">{test.name}</div>
-                <div class="test-details">{test.details}</div>
-                {f'<div class="measurements">Measurements: {meas_str}</div>' if meas_str else ''}
+                <div class="test-name">{html_lib.escape(str(test.name))}</div>
+                <div class="test-details">{html_lib.escape(str(test.details))}</div>
+                <div class="measurements">Duration: {html_lib.escape(duration_text)}</div>
+                {f'<div class="measurements">Measurements: {html_lib.escape(meas_str)}</div>' if meas_str else ''}
             </div>
-            <div class="test-status" style="background: {color};">{test.status.upper()}</div>
+            <div class="test-status" style="background: {color};">{html_lib.escape(str(test.status).upper())}</div>
         </div>
 """
 
             html += "</div>"
+
+        if report.external_peripherals:
+            external_json = html_lib.escape(json.dumps(report.external_peripherals, indent=2))
+            html += f"""
+    <section class="suite">
+        <h2>External Peripheral Observations</h2>
+        <p>Recorded: {len(report.external_peripherals)} · Passed: {report.external_passed} ·
+        Failed: {report.external_failed} · Warnings: {report.external_warnings} ·
+        Unknown/not tested: {report.external_unknown}</p>
+        <p>These are supplied observations/measurements, not independently verified by the host.</p>
+        <pre class="evidence-json">{external_json}</pre>
+    </section>
+"""
+        if report.untested_peripherals:
+            untested_items = "".join("<li>{}</li>".format(html_lib.escape(str(item))) for item in report.untested_peripherals)
+            html += f"""\n    <section class="suite">\n        <h2>Untested / Not Verified</h2>\n        <ul>{untested_items}</ul>\n    </section>\n"""
+
+        if report.ai_analysis:
+            deterministic = report.ai_analysis.startswith("[DETERMINISTIC_ALL_PASS_SUMMARY]")
+            ai_text = html_lib.escape(report.ai_analysis.replace("[DETERMINISTIC_ALL_PASS_SUMMARY]", "", 1).strip())
+            heading = "All-Pass Evidence Summary (Nemotron not called)" if deterministic else "Nemotron AI Diagnosis"
+            note = (
+                "No failures were recorded; a deterministic evidence summary is used to avoid unsupported repair advice."
+                if deterministic else
+                "AI advice is an evidence-based hypothesis, not a replacement for electrical measurements or qualified repair inspection."
+            )
+            html += f"""\n    <section class="suite">\n        <h2>{heading}</h2>\n        <p>{note}</p>\n        <pre class="ai-analysis">{ai_text}</pre>\n    </section>\n"""
 
         html += """
 </body>
@@ -214,12 +298,12 @@ class ReportGenerator:
 
     def _generate_text(self, report: DiagnosticReport, path: Path) -> None:
         """Generate text summary report."""
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(f"MCU Diagnostic Report\n")
             f.write(f"{'='*50}\n\n")
             f.write(f"MCU: {report.mcu_family} {report.mcu_part}\n")
             f.write(f"Date: {report.timestamp}\n")
-            f.write(f"Duration: {report.duration:.1f}s\n")
+            f.write("Duration: {}\n".format(format_duration(report.duration, "s")))
             f.write(f"Firmware Version: {report.firmware_version}\n")
             f.write(f"Device ID: {report.device_id}\n")
             f.write(f"Test Suites: {', '.join(report.test_suites)}\n\n")
@@ -234,11 +318,12 @@ class ReportGenerator:
             for suite in report.suites:
                 f.write(f"\nSuite: {suite.name}\n")
                 f.write(f"  Passed: {suite.passed}, Failed: {suite.failed}, Skipped: {suite.skipped}\n")
-                f.write(f"  Duration: {suite.duration_ms:.1f}ms\n")
+                f.write("  Duration: {}\n".format(format_duration(suite.duration_ms, "ms")))
 
                 for test in suite.tests:
                     status_str = test.status.upper()
                     f.write(f"  [{status_str}] {test.name}")
+                    f.write(" (duration: {})".format(format_duration(test.duration_ms, "ms")))
                     if test.details:
                         f.write(f" - {test.details}")
                     if test.measurements:
@@ -246,7 +331,41 @@ class ReportGenerator:
                         f.write(f" (Measurements: {meas_str})")
                     f.write(f"\n")
 
-            if report.failed > 0:
+            if report.external_peripherals:
+                f.write("\nEXTERNAL PERIPHERAL OBSERVATIONS\n")
+                f.write(f"{'-'*50}\n")
+                f.write(f"Recorded: {len(report.external_peripherals)}\n")
+                f.write(f"Passed: {report.external_passed}\n")
+                f.write(f"Failed: {report.external_failed}\n")
+                f.write(f"Warnings: {report.external_warnings}\n")
+                f.write(f"Unknown/not tested: {report.external_unknown}\n\n")
+                f.write(json.dumps(report.external_peripherals, indent=2))
+                f.write("\n")
+
+            if report.untested_peripherals:
+                f.write("\nUNTESTED / NOT VERIFIED\n")
+                f.write(f"{'-'*50}\n")
+                for item in report.untested_peripherals:
+                    f.write("- {}\n".format(item))
+
+            if report.ai_analysis:
+                deterministic = report.ai_analysis.startswith("[DETERMINISTIC_ALL_PASS_SUMMARY]")
+                heading = "ALL-PASS EVIDENCE SUMMARY (NEMOTRON NOT CALLED)" if deterministic else "NEMOTRON AI DIAGNOSIS"
+                f.write("\n{}\n".format(heading))
+                f.write(f"{'-'*50}\n")
+                analysis_text = report.ai_analysis.replace("[DETERMINISTIC_ALL_PASS_SUMMARY]", "", 1).strip()
+                f.write(analysis_text)
+                f.write("\n")
+                if not deterministic:
+                    f.write(
+                        "NOTE: AI analysis is advisory. Confirm suspected faults with "
+                        "appropriate measurements and safety procedures.\n"
+                    )
+
+            if report.failed > 0 or report.external_failed > 0:
                 f.write(f"\n{'!'*50}\n")
-                f.write(f"FAILED TESTS DETECTED - Hardware may be defective\n")
+                f.write(
+                    "FAILURES RECORDED - Review individual evidence; "
+                    "a failed check does not by itself prove hardware is defective.\n"
+                )
                 f.write(f"{'!'*50}\n")

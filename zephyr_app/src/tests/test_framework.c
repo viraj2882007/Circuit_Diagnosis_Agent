@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include "test_framework.h"
+#include "reporting.h"
 
 #define MAX_RESULTS 128
 
@@ -114,26 +115,30 @@ int diagnostic_run_suite(struct diagnostic_context *ctx,
     int passed = 0, failed = 0, skipped = 0;
 
     for (int i = 0; i < suite->test_count; i++) {
+        if (ctx->result_count >= ctx->result_capacity) {
+            return -ENOMEM;
+        }
+
         const struct test_case *test = &suite->tests[i];
         struct test_result *result = &ctx->results[ctx->result_count];
-
         test_result_init(result, test->name);
 
         int ret = test->func(ctx, result);
         if (ret < 0) {
             test_result_set_fail(result, "Test function returned error");
-            failed++;
         }
 
-        /* Store result */
+        /* Store and report each result exactly once. */
         ctx->result_count++;
-
-        /* Send progress report */
         diagnostic_send_test_result(ctx, result);
 
-        if (result->status == TEST_PASS) passed++;
-        else if (result->status == TEST_FAIL) failed++;
-        else skipped++;
+        if (result->status == TEST_PASS) {
+            passed++;
+        } else if (result->status == TEST_FAIL || result->status == TEST_ERROR) {
+            failed++;
+        } else {
+            skipped++;
+        }
     }
 
     /* Send suite summary */
@@ -154,25 +159,36 @@ int diagnostic_run_single_test(struct diagnostic_context *ctx,
         return -EINVAL;
     }
 
-    /* Find test in suites */
-    extern const struct test_suite basic_tests[];
-    extern const struct test_suite gpio_tests[];
-    extern const struct test_suite analog_tests[];
-    extern const struct test_suite communication_tests[];
-    extern const struct test_suite timing_tests[];
-    extern const struct test_suite memory_tests[];
-    extern const struct test_suite clock_tests[];
+    /* Test modules export test_case arrays, not test_suite descriptors. */
+    extern const struct test_case basic_tests[];
+    extern const struct test_case gpio_tests[];
+    extern const struct test_case adc_tests[];
+    extern const struct test_case dac_tests[];
+    extern const struct test_case uart_tests[];
+    extern const struct test_case spi_tests[];
+    extern const struct test_case i2c_tests[];
+    extern const struct test_case timer_tests[];
+    extern const struct test_case memory_tests[];
+    extern const struct test_case clock_tests[];
 
-    const struct test_suite *suites[] = {
-        basic_tests, gpio_tests, analog_tests,
-        communication_tests, timing_tests, memory_tests, clock_tests
+    const struct test_case *test_arrays[] = {
+        basic_tests, gpio_tests, adc_tests, dac_tests, uart_tests,
+        spi_tests, i2c_tests, timer_tests, memory_tests, clock_tests
     };
 
-    for (size_t s = 0; s < sizeof(suites)/sizeof(suites[0]); s++) {
-        for (int j = 0; suites[s][j].name != NULL; j++) {
-            if (strcmp(suites[s][j].name, test_name) == 0) {
+    for (size_t array_index = 0;
+         array_index < sizeof(test_arrays) / sizeof(test_arrays[0]);
+         array_index++) {
+        const struct test_case *cases = test_arrays[array_index];
+        for (size_t i = 0; cases[i].name != NULL; i++) {
+            if (strcmp(cases[i].name, test_name) == 0) {
                 test_result_init(result, test_name);
-                return suites[s][j].func(ctx, result);
+                int ret = cases[i].func(ctx, result);
+                if (ret < 0) {
+                    test_result_set_fail(result, "Test function returned error");
+                    return ret;
+                }
+                return 0;
             }
         }
     }
@@ -188,12 +204,3 @@ void diagnostic_set_device_id(struct diagnostic_context *ctx,
         ctx->device_id_len = len;
     }
 }
-
-/* Reporting functions - implemented in reporting.c */
-extern void diagnostic_send_test_result(struct diagnostic_context *ctx,
-                                        const struct test_result *result);
-extern void diagnostic_send_suite_summary(struct diagnostic_context *ctx,
-                                          const char *suite_name,
-                                          int passed, int failed, int skipped);
-extern int diagnostic_send_final_report(struct diagnostic_context *ctx);
-extern void diagnostic_send_device_info(struct diagnostic_context *ctx);

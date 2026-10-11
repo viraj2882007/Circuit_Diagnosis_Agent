@@ -1,0 +1,53 @@
+# Reference profiles for adapters and manual evidence collection.
+# These are recommended checks, not claims that the host executes every check automatically.
+profiles:
+  i2c_device:
+    description: "I2C sensors, displays, EEPROMs, and expanders"
+    evidence_to_capture:
+      - "Expected device address from the exact datasheet"
+      - "Observed ACK/NACK at that address and bus speed"
+      - "Logic voltage compatibility and measured supply voltage"
+      - "SDA/SCL wiring, pull-up presence, and bus stuck-low observations"
+    safety:
+      - "Power off before changing wiring."
+      - "Do not short SDA/SCL or probe unknown voltage domains."
+  spi_device:
+    description: "SPI sensors, displays, flash, and ADCs"
+    evidence_to_capture:
+      - "Chip-select behavior, mode (CPOL/CPHA), clock rate, and expected device ID"
+      - "MISO activity and returned register values"
+      - "Logic-level compatibility and supply measurements"
+    safety:
+      - "Verify pinout and voltage levels against the device datasheet before connecting."
+  uart_device:
+    description: "UART sensors, GNSS modules, modems, and serial peripherals"
+    evidence_to_capture:
+      - "Baud rate, data bits, parity, stop bits, and framing errors"
+      - "TX/RX mapping, common ground, and known-good cable/adapter"
+      - "Received protocol header or device identity where documented"
+    safety:
+      - "Confirm TTL/CMOS versus RS-232/RS-485 signaling before connecting."
+  gpio_attached:
+    description: "Buttons, interrupt lines, relays, and digital sensors"
+    evidence_to_capture:
+      - "Expected idle/active level, pull-up/down configuration, and timing"
+      - "Measured logic level and load/current requirements"
+      - "Whether external jumper or fixture is required"
+    safety:
+      - "Never drive a GPIO against another active output or a relay coil directly."
+  adc_sensor:
+    description: "Analog sensors and signal-conditioning circuits"
+    evidence_to_capture:
+      - "Measured input voltage and ADC raw value"
+      - "Reference voltage, attenuation, expected range, and sensor supply"
+      - "Known-good stimulus or calibrated meter reading"
+    safety:
+      - "Keep input within the MCU absolute maximum ratings; use a meter before reconnecting."
+  usb_device:
+    description: "USB peripherals connected to a host or supported embedded USB controller"
+    evidence_to_capture:
+      - "Enumeration result, descriptor/vendor-product IDs, and OS error"
+      - "Known-good cable/port and power-delivery observations"
+      - "Whether host/device role and USB stack are supported by this board"
+    safety:
+      - "Do not assume every MCU board supports host mode or can power the attached device."

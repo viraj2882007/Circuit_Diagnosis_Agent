@@ -1,0 +1,35 @@
+name: Zephyr firmware builds
+
+on:
+  push:
+    branches:
+      - main
+      - feat/nemotron-peripheral-diagnostics
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Zephyr on ${{ matrix.board }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: stm32f4_disco
+            toolchains: arm-zephyr-eabi
+          - board: rpi_pico
+            toolchains: arm-zephyr-eabi
+          - board: esp32_devkitc/esp32/procpu
+            toolchains: xtensa-espressif_esp32_zephyr-elf
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v4
+
+      - name: Set up Zephyr workspace and SDK
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: zephyr_app
+          toolchains: ${{ matrix.toolchains }}
+
+      - name: Compile diagnostic firmware
+        run: west build -p always -b "${{ matrix.board }}" zephyr_app

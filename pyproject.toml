@@ -46,6 +46,9 @@ viz = [
 
 [project.scripts]
 mcu-diag = "mcu_diagnostic_agent.orchestrator.agent:main"
+mcu-board = "mcu_diagnostic_agent.board_detection:main"
+mcu-uno-test = "mcu_diagnostic_agent.arduino_uno_adapter:main"
+mcu-fault-eval = "mcu_diagnostic_agent.fault_injection:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -58,9 +61,7 @@ line-length = 100
 target-version = "py39"
 select = ["E", "F", "I", "UP", "W", "C4", "C9", "B", "SIM", "TID", "ARG", "PTH", "ERA", "PL", "TRY", "NPY", "RSE", "RET", "ASYNC"]
 ignore = ["S101", "TRY003", "ARG001", "ARG002"]
-per-file-ignores = {
-    "tests/*": ["S101", "ERA001"],
-}
+per-file-ignores = { "tests/*" = ["S101", "ERA001"] }
 
 [tool.black]
 line-length = 100

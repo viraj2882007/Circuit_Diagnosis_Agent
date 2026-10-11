@@ -1,0 +1,49 @@
+name: Python tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feat/nemotron-peripheral-diagnostics
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install project and development dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Compile Python modules
+        run: python -m compileall -q src tests
+      - name: Smoke-test CLI imports
+        run: |
+          python -c "from mcu_diagnostic_agent.orchestrator.agent import DiagnosticAgent; from mcu_diagnostic_agent.ai_diagnosis import generate_ai_analysis"
+          python -m mcu_diagnostic_agent.board_detection --help
+          python -m mcu_diagnostic_agent.arduino_uno_adapter --help
+          mcu-fault-eval --help
+      - name: Run unit tests
+        run: python -m pytest -q
+
+  arduino-firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+      - name: Install Arduino AVR core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr
+      - name: Compile Arduino Uno R3 diagnostic firmware
+        run: arduino-cli compile --fqbn arduino:avr:uno firmware/arduino_uno_r3

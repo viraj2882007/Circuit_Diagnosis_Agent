@@ -20,32 +20,39 @@
 /* Test: CPU identification */
 int test_cpu_id(struct diagnostic_context *ctx, struct test_result *result)
 {
-    uint8_t dev_id[32];
-    size_t id_len = sizeof(dev_id);
-    int ret = hwinfo_get_device_id(dev_id, &id_len);
+    uint8_t dev_id[32] = {0};
+    int id_bytes = (int)hwinfo_get_device_id(dev_id, sizeof(dev_id));
 
     char details[256];
-    if (ret == 0 && id_len > 0) {
+    if (id_bytes > 0) {
+        size_t id_len = (size_t)id_bytes;
+        if (id_len > sizeof(dev_id)) {
+            id_len = sizeof(dev_id);
+        }
         char id_str[65] = {0};
-        for (size_t i = 0; i < id_len && i < 32; i++) {
+        for (size_t i = 0; i < id_len; i++) {
             snprintf(id_str + i * 2, sizeof(id_str) - i * 2, "%02X", dev_id[i]);
         }
         snprintf(details, sizeof(details), "Device ID (%zu bytes): %s", id_len, id_str);
         test_result_set_pass(result, details);
+        test_result_add_measurement(result, (uint32_t)id_len);
+    } else if (id_bytes == -ENOSYS || id_bytes == -ENOTSUP || id_bytes == 0) {
+        test_result_set_skip(result, "Unique hardware ID is not implemented by this board.");
     } else {
-        snprintf(details, sizeof(details), "Failed to get device ID: %d", ret);
+        snprintf(details, sizeof(details), "Hardware-ID read failed: %d", id_bytes);
         test_result_set_fail(result, details);
     }
-
-    test_result_add_measurement(result, id_len);
     return 0;
 }
+
+/* Reserved storage keeps the quick RAM test away from stack, heap, and live data. */
+static volatile uint32_t quick_ram_test_buffer[256];
 
 /* Test: RAM March test (quick) */
 int test_ram_march_quick(struct diagnostic_context *ctx, struct test_result *result)
 {
-    volatile uint32_t *ram = (volatile uint32_t *)0x20000000;
-    size_t test_words = 256;  /* 1KB quick test */
+    volatile uint32_t *ram = quick_ram_test_buffer;
+    const size_t test_words = sizeof(quick_ram_test_buffer) / sizeof(quick_ram_test_buffer[0]);
     int errors = 0;
 
     for (size_t i = 0; i < test_words; i++) ram[i] = 0;
@@ -54,7 +61,9 @@ int test_ram_march_quick(struct diagnostic_context *ctx, struct test_result *res
     for (size_t i = 0; i < test_words; i++) if (ram[i] != 0xFFFFFFFF) errors++;
 
     char details[128];
-    snprintf(details, sizeof(details), "Quick RAM test: %d errors in %zu words", errors, test_words);
+    snprintf(details, sizeof(details),
+             "Quick RAM-buffer test: %d errors in %zu reserved words (not a whole-RAM test)",
+             errors, test_words);
 
     if (errors == 0) {
         test_result_set_pass(result, details);
@@ -67,33 +76,10 @@ int test_ram_march_quick(struct diagnostic_context *ctx, struct test_result *res
     return 0;
 }
 
-/* Test: Flash ID / JEDEC */
+/* Flash capacity/identity APIs vary by board; avoid unconditional flash0 references. */
 int test_flash_id(struct diagnostic_context *ctx, struct test_result *result)
 {
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(flash0), okay)
-    const struct device *flash_dev = DEVICE_DT_GET(DT_NODELABEL(flash0));
-    if (!device_is_ready(flash_dev)) {
-        test_result_set_skip(result, "Flash not available");
-        return 0;
-    }
-
-    const struct flash_parameters *params = flash_get_parameters(flash_dev);
-    if (!params) {
-        test_result_set_fail(result, "Flash parameters not available");
-        return 0;
-    }
-
-    char details[256];
-    snprintf(details, sizeof(details),
-             "Flash: size=%zu KB, erase_value=0x%02X, write_block=%zu",
-             params->size / 1024, params->erase_value, params->write_block_size);
-
-    test_result_set_pass(result, details);
-    test_result_add_measurement(result, params->size / 1024);
-    test_result_add_measurement(result, params->erase_value);
-#else
-    test_result_set_skip(result, "Flash not available");
-#endif
+    test_result_set_skip(result, "Flash identity requires a board-specific supported flash profile.");
     return 0;
 }
 
@@ -103,8 +89,8 @@ int test_clock_check(struct diagnostic_context *ctx, struct test_result *result)
     uint32_t freq = sys_clock_hw_cycles_per_sec();
 
     char details[128];
-    snprintf(details, sizeof(details), "System clock: %u Hz (%.2f MHz)",
-             freq, freq / 1000000.0);
+    snprintf(details, sizeof(details), "System clock: %u Hz (%u.%02u MHz)",
+             freq, freq / 1000000U, (freq % 1000000U) / 10000U);
 
     if (freq > 1000000 && freq < 500000000) {
         test_result_set_pass(result, details);
@@ -116,33 +102,10 @@ int test_clock_check(struct diagnostic_context *ctx, struct test_result *result)
     return 0;
 }
 
-/* Test: GPIO toggle (quick) */
+/* Hard-coded GPIOA pin numbers are not portable across MCU families. */
 int test_gpio_toggle(struct diagnostic_context *ctx, struct test_result *result)
 {
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpioa), okay)
-    const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpioa));
-    if (!device_is_ready(gpio)) {
-        test_result_set_skip(result, "GPIO not available");
-        return 0;
-    }
-
-    int ret = gpio_pin_configure(gpio, 5, GPIO_OUTPUT_INACTIVE);  /* LED pin typically */
-    if (ret < 0) {
-        test_result_set_fail(result, "GPIO configure failed");
-        return 0;
-    }
-
-    for (int i = 0; i < 10; i++) {
-        gpio_pin_set(gpio, 5, 1);
-        k_busy_wait(50000);
-        gpio_pin_set(gpio, 5, 0);
-        k_busy_wait(50000);
-    }
-
-    test_result_set_pass(result, "GPIO toggle test passed (10 cycles)");
-#else
-    test_result_set_skip(result, "GPIO not available")
-#endif
+    test_result_set_skip(result, "Hard-coded GPIO pin test disabled; use the board LED alias or an approved per-board pin profile.");
     return 0;
 }
 
