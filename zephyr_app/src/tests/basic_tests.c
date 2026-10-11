@@ -126,33 +126,10 @@ int test_clock_check(struct diagnostic_context *ctx, struct test_result *result)
     return 0;
 }
 
-/* Test: GPIO toggle (quick) */
+/* Hard-coded GPIOA pin numbers are not portable across MCU families. */
 int test_gpio_toggle(struct diagnostic_context *ctx, struct test_result *result)
 {
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpioa), okay)
-    const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpioa));
-    if (!device_is_ready(gpio)) {
-        test_result_set_skip(result, "GPIO not available");
-        return 0;
-    }
-
-    int ret = gpio_pin_configure(gpio, 5, GPIO_OUTPUT_INACTIVE);  /* LED pin typically */
-    if (ret < 0) {
-        test_result_set_fail(result, "GPIO configure failed");
-        return 0;
-    }
-
-    for (int i = 0; i < 10; i++) {
-        gpio_pin_set(gpio, 5, 1);
-        k_busy_wait(50000);
-        gpio_pin_set(gpio, 5, 0);
-        k_busy_wait(50000);
-    }
-
-    test_result_set_pass(result, "GPIO toggle test passed (10 cycles)");
-#else
-    test_result_set_skip(result, "GPIO not available");
-#endif
+    test_result_set_skip(result, "Hard-coded GPIO pin test disabled; use the board LED alias or an approved per-board pin profile.");
     return 0;
 }
 
