@@ -146,6 +146,19 @@ mcu-fault-eval .\\results\\fault-injection-cases.json --output .\\results\\fault
 
 The primary metric is correctly identified injected faults divided by all injected faults. Unreviewed trials remain in the denominator and are never counted as correct. Per-fault scores and review coverage are also reported. This avoids claiming measured accuracy before real fault-injection trials and ground-truth review are completed.
 
+
+#### Safe manual Uno fault-injection procedure
+
+Use only low-voltage, documented loopback wiring. Never short 5V to GND, drive unknown pins, inject faults into a powered external module, or deliberately create an electrical short.
+
+1. Run a known-good baseline: `mcu-uno-test --port COM9 --interactive`; record the generated JSON report.
+2. For a GPIO-open fault, connect only the requested D2-D3 jumper, verify the normal loopback, and record the report.
+3. Power off/unplug USB before changing wiring. Remove that jumper deliberately, reconnect USB, rerun the same test, and record the resulting report.
+4. Compare the diagnosed symptom with the injected ground truth. Mark the case `correct`, `incorrect`, `missed`, or `inconclusive`; do not mark cases correct merely because a test failed.
+5. Repeat with different pin pairs and more than one trial. Keep a separate record of exactly what was disconnected and the report file associated with each trial.
+
+The current Uno runner does not automatically inject physical faults. I2C-line fault injection requires a known sensor/bus and should be done only by a tester who can verify voltage levels and perform the disconnection with power off. Do not use random pin shorts as a fault-injection technique.
+
 The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP180, BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
 
 ### Zephyr test suites
