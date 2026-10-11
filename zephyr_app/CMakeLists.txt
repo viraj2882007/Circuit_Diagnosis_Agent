@@ -10,8 +10,8 @@ if(NOT DEFINED DIAGNOSTIC_TEST_SUITES)
     set(DIAGNOSTIC_TEST_SUITES "basic;gpio;adc;dac;uart;spi;i2c;timing;memory;clock")
 endif()
 
-# Convert semicolon-separated list to C array
-string(REPLACE ";" "\";\"" TEST_SUITES_STR "${DIAGNOSTIC_TEST_SUITES}")
+# Convert the CMake list into one comma-separated C string.
+string(REPLACE ";" "," TEST_SUITES_STR "${DIAGNOSTIC_TEST_SUITES}")
 add_compile_definitions(DIAGNOSTIC_TEST_SUITES="${TEST_SUITES_STR}")
 
 # Enable required features
