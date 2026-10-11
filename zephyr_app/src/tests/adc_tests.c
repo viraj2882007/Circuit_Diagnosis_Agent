@@ -157,59 +157,10 @@ int test_adc_vref(struct diagnostic_context *ctx, struct test_result *result)
 #endif
 }
 
-/* Test: External ADC channel (requires known voltage on pin) */
+/* ADC input accuracy cannot be claimed without known voltage stimulus and reference. */
 int test_adc_external(struct diagnostic_context *ctx, struct test_result *result)
 {
-    if (!ADC_DEV || !device_is_ready(ADC_DEV)) {
-        test_result_set_skip(result, "ADC device not available");
-        return 0;
-    }
-
-    int ret = adc_channel_setup(ADC_DEV, &ext_channel_cfg);
-    if (ret < 0) {
-        test_result_set_skip(result, "ADC channel 0 is not available in this board's device tree/profile.");
-        return 0;
-    }
-
-    struct adc_sequence sequence = {
-        .channels = BIT(0),
-        .buffer = &(uint16_t){0},
-        .buffer_size = sizeof(uint16_t),
-        .resolution = 12,
-    };
-
-    /* Take multiple samples */
-    uint32_t sum = 0;
-    const int samples = 10;
-
-    for (int i = 0; i < samples; i++) {
-        ret = adc_read(ADC_DEV, &sequence);
-        if (ret < 0) {
-            test_result_set_fail(result, "ADC read failed");
-            return 0;
-        }
-        sum += *(uint16_t *)sequence.buffer;
-        k_busy_wait(100);
-    }
-
-    uint16_t avg = sum / samples;
-    uint32_t estimated_millivolts = ((uint32_t)avg * 3300U) / 4095U;
-
-    char details[160];
-    snprintf(details, sizeof(details),
-             "Ext ADC Avg: %u/4095, estimated_voltage=%lumV assuming nominal 3300mV reference",
-             avg, (unsigned long)estimated_millivolts);
-
-    /* Range plausibility only; calibration accuracy requires an independent voltage reference. */
-    if (avg <= 4095U) {
-        test_result_set_pass(result, details);
-    } else {
-        test_result_set_fail(result, details);
-    }
-
-    test_result_add_measurement(result, avg);
-    test_result_add_measurement(result, estimated_millivolts);
-
+    test_result_set_skip(result, "External ADC test requires a board-specific input pin, known safe voltage stimulus, and independent reference measurement.");
     return 0;
 }
 
