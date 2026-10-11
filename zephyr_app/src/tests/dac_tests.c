@@ -21,55 +21,10 @@
 #define DAC_RESOLUTION 12
 #define DAC_MAX_VALUE ((1 << DAC_RESOLUTION) - 1)
 
-/* Test: DAC output voltage levels */
+/* Never drive unprofiled DAC pins automatically; outputs may be connected to real circuitry. */
 int test_dac_output(struct diagnostic_context *ctx, struct test_result *result)
 {
-    if (!DAC_DEV || !device_is_ready(DAC_DEV)) {
-        test_result_set_skip(result, "DAC device not available");
-        return 0;
-    }
-
-    const uint16_t test_values[] = {
-        0,
-        DAC_MAX_VALUE / 4,
-        DAC_MAX_VALUE / 2,
-        3 * DAC_MAX_VALUE / 4,
-        DAC_MAX_VALUE,
-    };
-
-    int passed = 0;
-
-    for (int ch = 0; ch < 2; ch++) {
-        for (int i = 0; i < 5; i++) {
-            int ret = dac_write_value(DAC_DEV, ch, test_values[i]);
-            if (ret < 0) {
-                char details[128];
-                snprintf(details, sizeof(details), "DAC ch%d write failed at value %u",
-                         ch, test_values[i]);
-                test_result_set_fail(result, details);
-                return 0;
-            }
-
-            k_busy_wait(1000); /* Let output settle */
-
-            /* In real test, would read back via ADC on same pin */
-            /* For now, just verify write succeeds */
-            passed++;
-        }
-    }
-
-    char details[128];
-    snprintf(details, sizeof(details), "DAC output test: %d/10 writes successful", passed);
-
-    if (passed == 10) {
-        test_result_set_pass(result, details);
-    } else {
-        test_result_set_fail(result, details);
-    }
-
-    test_result_add_measurement(result, passed);
-    test_result_add_measurement(result, 10);
-
+    test_result_set_skip(result, "DAC output sweep requires a board-specific safe pin map and external voltage measurement.");
     return 0;
 }
 
