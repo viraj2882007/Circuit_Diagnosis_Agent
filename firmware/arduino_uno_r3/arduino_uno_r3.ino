@@ -144,6 +144,19 @@ void testPwm(int pwmPin, int inputPin) {
     else ++lowSamples;
   }
 
+  // Coarse timing evidence from the loopback input. Calibrated instrumentation is still needed.
+  const unsigned long pulseTimeoutUs = 50000UL;
+  unsigned long highPulseUs = pulseIn(inputPin, HIGH, pulseTimeoutUs);
+  unsigned long lowPulseUs = pulseIn(inputPin, LOW, pulseTimeoutUs);
+  bool pulseTimingAvailable = highPulseUs > 0 && lowPulseUs > 0;
+  unsigned long periodUs = highPulseUs + lowPulseUs;
+  float frequencyHz = 0.0f;
+  float dutyPercent = 0.0f;
+  if (pulseTimingAvailable && periodUs > 0) {
+    frequencyHz = 1000000.0f / (float)periodUs;
+    dutyPercent = 100.0f * (float)highPulseUs / (float)periodUs;
+  }
+
   analogWrite(pwmPin, 0);
   digitalWrite(pwmPin, LOW);
   pinMode(pwmPin, INPUT);
@@ -151,13 +164,21 @@ void testPwm(int pwmPin, int inputPin) {
 
   Serial.print(F("Samples: HIGH=")); Serial.print(highSamples);
   Serial.print(F(" LOW=")); Serial.println(lowSamples);
-  bool pass = highSamples > 20 && lowSamples > 20;
+  if (pulseTimingAvailable) {
+    Serial.print(F("PWM_MEASUREMENT: high_us=")); Serial.print(highPulseUs);
+    Serial.print(F(" low_us=")); Serial.print(lowPulseUs);
+    Serial.print(F(" frequency_hz=")); Serial.print(frequencyHz, 1);
+    Serial.print(F(" duty_percent=")); Serial.println(dutyPercent, 1);
+  } else {
+    Serial.println(F("PWM_MEASUREMENT: unavailable; no complete HIGH/LOW pulse was captured"));
+  }
+  bool pass = highSamples > 20 && lowSamples > 20 && pulseTimingAvailable;
   unsigned long elapsedMs = millis() - testStarted;
   Serial.print(F("PWM RESULT: "));
-  Serial.print(pass ? F("PASS - both HIGH and LOW levels observed") :
-                      F("FAIL - jumper, pin or PWM output needs checking"));
+  Serial.print(pass ? F("PASS - both levels and pulse timing observed") :
+                      F("FAIL - check jumper, pin, PWM output and pulse timing"));
   Serial.print(F("; duration_ms=")); Serial.println(elapsedMs);
-  Serial.println(F("This is a basic functional check, not a precision frequency/duty-cycle measurement."));
+  Serial.println(F("Frequency/duty are coarse pulseIn measurements; use a logic analyzer or oscilloscope for calibration."));
 }
 
 int parseAnalogPin(const char *arg) {
