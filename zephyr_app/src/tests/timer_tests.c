@@ -11,14 +11,6 @@
 
 #include "test_framework.h"
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(timer0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(pwm0), okay)
-#define PWM_DEV DEVICE_DT_GET(DT_NODELABEL(pwm0))
-#define COUNTER_DEV DEVICE_DT_GET(DT_NODELABEL(timer0))
-#else
-#define PWM_DEV NULL
-#define COUNTER_DEV NULL
-#endif
-
 /* PWM pin routes differ by MCU/board; a blind sweep can drive connected circuitry. */
 int test_pwm_output(struct diagnostic_context *ctx, struct test_result *result)
 {
