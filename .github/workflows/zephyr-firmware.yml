@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         board:
-          - nucleo_f407zg
+          - stm32f4_disco
           - esp32_devkitc/esp32/procpu
           - rpi_pico
     steps:
