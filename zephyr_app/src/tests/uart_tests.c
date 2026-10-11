@@ -10,15 +10,6 @@
 
 #include "test_framework.h"
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay) || DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_console), okay)
-#define UART_DEV DEVICE_DT_GET(DT_CHOSEN(zephyr_console))
-#else
-#define UART_DEV NULL
-#endif
-
-#define TEST_BAUD_RATE 115200
-#define LOOPBACK_TIMEOUT_MS 100
-
 /* UART0/console is shared with diagnostic reporting. Generic loopback is opt-in only. */
 int test_uart_loopback(struct diagnostic_context *ctx, struct test_result *result)
 {
