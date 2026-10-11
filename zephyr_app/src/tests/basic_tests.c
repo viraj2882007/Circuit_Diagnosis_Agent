@@ -5,6 +5,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/hwinfo.h>
+#include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/entropy.h>
 #include <string.h>
 #include <stdio.h>
@@ -20,24 +21,28 @@
 /* Test: CPU identification */
 int test_cpu_id(struct diagnostic_context *ctx, struct test_result *result)
 {
-    uint8_t dev_id[32];
-    size_t id_len = sizeof(dev_id);
-    int ret = hwinfo_get_device_id(dev_id, &id_len);
+    uint8_t dev_id[32] = {0};
+    int id_bytes = (int)hwinfo_get_device_id(dev_id, sizeof(dev_id));
 
     char details[256];
-    if (ret == 0 && id_len > 0) {
+    if (id_bytes > 0) {
+        size_t id_len = (size_t)id_bytes;
+        if (id_len > sizeof(dev_id)) {
+            id_len = sizeof(dev_id);
+        }
         char id_str[65] = {0};
-        for (size_t i = 0; i < id_len && i < 32; i++) {
+        for (size_t i = 0; i < id_len; i++) {
             snprintf(id_str + i * 2, sizeof(id_str) - i * 2, "%02X", dev_id[i]);
         }
         snprintf(details, sizeof(details), "Device ID (%zu bytes): %s", id_len, id_str);
         test_result_set_pass(result, details);
+        test_result_add_measurement(result, (uint32_t)id_len);
+    } else if (id_bytes == -ENOSYS || id_bytes == -ENOTSUP || id_bytes == 0) {
+        test_result_set_skip(result, "Unique hardware ID is not implemented by this board.");
     } else {
-        snprintf(details, sizeof(details), "Failed to get device ID: %d", ret);
+        snprintf(details, sizeof(details), "Hardware-ID read failed: %d", id_bytes);
         test_result_set_fail(result, details);
     }
-
-    test_result_add_measurement(result, id_len);
     return 0;
 }
 
