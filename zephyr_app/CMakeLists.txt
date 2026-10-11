@@ -12,7 +12,7 @@ endif()
 
 # Convert the CMake list into one comma-separated C string.
 string(REPLACE ";" "," TEST_SUITES_STR "${DIAGNOSTIC_TEST_SUITES}")
-add_compile_definitions(DIAGNOSTIC_TEST_SUITES="${TEST_SUITES_STR}")
+add_compile_definitions(DIAGNOSTIC_TEST_SUITES=\"${TEST_SUITES_STR}\")
 
 # Enable required features
 target_sources(app PRIVATE
