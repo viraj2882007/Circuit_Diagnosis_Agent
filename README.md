@@ -182,6 +182,8 @@ The Zephyr app maps suite names to the actual test-case arrays compiled into the
 
 A test suite being compiled does not mean it has been executed on hardware. Unsupported peripherals should be skipped based on the selected board/device capability; measured hardware validation still requires the corresponding target and test setup.
 
+The generic Zephyr memory tests are intentionally non-destructive: flash-write and flash-erase test names return **SKIP** because a generic app cannot safely guess an unused flash sector or guarantee firmware/data recovery. RAM checks use dedicated reserved buffers in `.bss`; they validate those buffers only, not every physical RAM cell. No RAM test writes to a hard-coded address such as `0x20000000`.
+
 ## Architecture
 
 ```
