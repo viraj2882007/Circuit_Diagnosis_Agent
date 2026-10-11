@@ -10,8 +10,6 @@
 
 #include "test_framework.h"
 
-#include "test_framework.h"
-
 /* Keep DAC outputs untouched without a board-specific pin map and voltage capture. */
 int test_dac_output(struct diagnostic_context *ctx, struct test_result *result)
 {
