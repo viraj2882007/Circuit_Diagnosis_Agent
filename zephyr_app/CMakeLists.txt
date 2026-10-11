@@ -45,22 +45,6 @@ target_compile_definitions(app PRIVATE
     CONFIG_DIAGNOSTIC_BUFFER_SIZE=2048
 )
 
-# Link libraries
-target_link_libraries(app PRIVATE
-    zephyr_interface
-    zephyr_kernel
-    zephyr_drivers_gpio
-    zephyr_drivers_adc
-    zephyr_drivers_dac
-    zephyr_drivers_uart
-    zephyr_drivers_spi
-    zephyr_drivers_i2c
-    zephyr_drivers_counter
-    zephyr_drivers_pwm
-    zephyr_drivers_flash
-    zephyr_drivers_entropy
-    zephyr_drivers_hwinfo
-    zephyr_logging
-    zephyr_settings
-    zephyr_shell
-)
+
+# Zephyr's CMake package links enabled kernel/drivers through app; do not
+# manually link synthetic driver target names.
