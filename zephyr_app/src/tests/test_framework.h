@@ -6,6 +6,7 @@
 #define TEST_FRAMEWORK_H
 
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/gpio.h>
 #include <stdint.h>
 #include <stdbool.h>
 
