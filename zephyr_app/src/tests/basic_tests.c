@@ -41,11 +41,14 @@ int test_cpu_id(struct diagnostic_context *ctx, struct test_result *result)
     return 0;
 }
 
+/* Reserved storage keeps the quick RAM test away from stack, heap, and live data. */
+static volatile uint32_t quick_ram_test_buffer[256];
+
 /* Test: RAM March test (quick) */
 int test_ram_march_quick(struct diagnostic_context *ctx, struct test_result *result)
 {
-    volatile uint32_t *ram = (volatile uint32_t *)0x20000000;
-    size_t test_words = 256;  /* 1KB quick test */
+    volatile uint32_t *ram = quick_ram_test_buffer;
+    const size_t test_words = sizeof(quick_ram_test_buffer) / sizeof(quick_ram_test_buffer[0]);
     int errors = 0;
 
     for (size_t i = 0; i < test_words; i++) ram[i] = 0;
@@ -54,7 +57,9 @@ int test_ram_march_quick(struct diagnostic_context *ctx, struct test_result *res
     for (size_t i = 0; i < test_words; i++) if (ram[i] != 0xFFFFFFFF) errors++;
 
     char details[128];
-    snprintf(details, sizeof(details), "Quick RAM test: %d errors in %zu words", errors, test_words);
+    snprintf(details, sizeof(details),
+             "Quick RAM-buffer test: %d errors in %zu reserved words (not a whole-RAM test)",
+             errors, test_words);
 
     if (errors == 0) {
         test_result_set_pass(result, details);
