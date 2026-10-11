@@ -7,7 +7,7 @@ project(mcu_diagnostic_firmware)
 
 # Parse test suites from CMake command line
 if(NOT DEFINED DIAGNOSTIC_TEST_SUITES)
-    set(DIAGNOSTIC_TEST_SUITES "basic;gpio;analog;communication;timing;memory;clock")
+    set(DIAGNOSTIC_TEST_SUITES "basic;gpio;adc;dac;uart;spi;i2c;timing;memory;clock")
 endif()
 
 # Convert semicolon-separated list to C array
