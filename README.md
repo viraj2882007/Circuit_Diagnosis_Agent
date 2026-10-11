@@ -105,9 +105,16 @@ mcu-uno-test --port COM9
 # This mode prompts for each jumper/wiring change and records skipped checks as skipped.
 mcu-uno-test --port COM9 --interactive
 
-# Optional I2C scan + known chip-ID checks + AI analysis; check voltage/pull-ups first.
+# Optional I2C scan + known chip-ID checks + Markdown AI analysis; check voltage/pull-ups first.
 mcu-uno-test --port COM9 --identify-i2c --ai-analysis
+
+# Structured JSON diagnosis (findings, ranked causes, repairability, missing evidence,
+# and non-executing fix suggestions). With an all-pass report, JSON is deterministic
+# and does not call the generative model.
+mcu-uno-test --port COM9 --ai-analysis --ai-format json
 ```
+
+The `--ai-format json` option requests a JSON object from NVIDIA NIM, validates required fields, and forcibly marks every fix suggestion as advisory (`automatic_execution: false`). It does not execute suggested fixes. Malformed model JSON produces an explicit AI-analysis error rather than being silently treated as valid structured output. The default remains Markdown.
 
 The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
 
