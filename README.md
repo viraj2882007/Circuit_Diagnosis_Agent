@@ -159,6 +159,8 @@ Use only low-voltage, documented loopback wiring. Never short 5V to GND, drive u
 
 The current Uno runner does not automatically inject physical faults. I2C-line fault injection requires a known sensor/bus and should be done only by a tester who can verify voltage levels and perform the disconnection with power off. Do not use random pin shorts as a fault-injection technique.
 
+The Uno PWM test now records pulse HIGH/LOW durations and estimates frequency (Hz) and duty cycle (%) from the loopback using the MCU's `pulseIn` timer. This is coarse software-timed evidence, not calibrated instrumentation; validate it against a logic analyzer or oscilloscope before treating the values as precision measurements. ADC loopback reports raw counts against known LOW/HIGH levels. A true supply-voltage reading or ADC accuracy calibration requires an independently measured reference (for example, a multimeter) and should be added as a recorded external observation; the software does not pretend to measure VCC without one.
+
 The interactive checks require the user to move one jumper at a time. D0/D1 are reserved for USB serial. The I2C scanner reports addresses that ACK. With the explicit --identify-i2c option, the adapter additionally reads documented identity registers for a small known-profile registry (BMP180, BMP280, BME280, MPU-6050, LIS3DH and LSM6DS3). A matching chip ID identifies a device model but does not prove its full function; unidentified addresses remain unknown observations, never automatic failures. The adapter asks for confirmation before probing the bus and only reads profile-listed identity registers.
 
 ### Zephyr test suites
