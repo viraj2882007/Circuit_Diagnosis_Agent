@@ -58,6 +58,7 @@ class DiagnosticConfig:
     ai_analysis: bool = False
     external_observations_file: Optional[Path] = None
     nemotron_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    ai_format: str = "markdown"
     allow_firmware_overwrite: bool = False
 
 
@@ -252,6 +253,7 @@ class DiagnosticAgent:
                 report.ai_analysis = generate_ai_analysis(
                     asdict(report),
                     model=self.config.nemotron_model,
+                    output_format=self.config.ai_format,
                 )
             except Exception as exc:
                 # Preserve the measured diagnostic report even if the API is unavailable.
@@ -311,6 +313,7 @@ async def main_async(args: argparse.Namespace) -> int:
             Path(args.external_observations) if args.external_observations else None
         ),
         nemotron_model=args.nemotron_model,
+        ai_format=args.ai_format,
         allow_firmware_overwrite=args.allow_firmware_overwrite,
     )
 
@@ -361,6 +364,12 @@ def main() -> int:
         "--nemotron-model",
         default="nvidia/nemotron-3-ultra-550b-a55b",
         help="NVIDIA NIM model identifier (default: Nemotron 3 Ultra)",
+    )
+    parser.add_argument(
+        "--ai-format",
+        choices=["markdown", "json"],
+        default="markdown",
+        help="Nemotron output format. JSON includes structured findings and safe fix suggestions.",
     )
     parser.add_argument(
         "--external-observations",
