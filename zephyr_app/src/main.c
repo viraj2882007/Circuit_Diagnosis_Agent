@@ -99,7 +99,7 @@ int main(void)
 
     /* CMake expands this list into a string literal; copy it before strtok mutates it. */
     char enabled_suites[] = DIAGNOSTIC_TEST_SUITES;
-    char *suite_name = strtok(enabled_suites, ";");
+    char *suite_name = strtok(enabled_suites, ",");
 
     LOG_INF("Starting diagnostic test suites...");
     while (suite_name != NULL) {
@@ -135,7 +135,7 @@ int main(void)
             LOG_WRN("Unknown test suite: %s", suite_name);
         }
 
-        suite_name = strtok(NULL, ";");
+        suite_name = strtok(NULL, ",");
     }
 
     LOG_INF("All tests complete, sending final report");
