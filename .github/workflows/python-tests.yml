@@ -30,6 +30,7 @@ jobs:
           python -c "from mcu_diagnostic_agent.orchestrator.agent import DiagnosticAgent; from mcu_diagnostic_agent.ai_diagnosis import generate_ai_analysis"
           python -m mcu_diagnostic_agent.board_detection --help
           python -m mcu_diagnostic_agent.arduino_uno_adapter --help
+          mcu-fault-eval --help
       - name: Run unit tests
         run: python -m pytest -q
 
